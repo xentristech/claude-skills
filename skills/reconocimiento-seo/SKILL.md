@@ -9,7 +9,7 @@ description: >-
   "hazme el SEO técnico de este sitio". Produce un worksheet llenado (Reconocimiento,
   Contenidos, Recomendaciones y Enlaces) listo para entregar al cliente.
 metadata:
-  author: Daniel Bustillos (plantilla) / adaptado a skill
+  author: Farid Enrique Jiménez Campo (plantilla) / adaptado a skill
   version: 1.0.0
 ---
 

@@ -129,7 +129,7 @@ claude-skills/
 ## 🙌 Créditos
 
 - Skills `ai-seo` y `xentris-*` — **Eathan · Xentris Tech**.
-- `reconocimiento-seo` — metodología basada en la plantilla de **Daniel Bustillos**, adaptada a skill por Xentris Tech.
+- `reconocimiento-seo` — metodología basada en la plantilla de **Farid Enrique Jiménez Campo**, adaptada a skill por Xentris Tech.
 
 ---
 

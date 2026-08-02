@@ -7,7 +7,7 @@
 <br/>
 
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Agent_Skills-D97757?style=for-the-badge&logo=anthropic&logoColor=white)
-![Skills](https://img.shields.io/badge/Skills-6-2E7D32?style=for-the-badge)
+![Skills](https://img.shields.io/badge/Skills-8-2E7D32?style=for-the-badge)
 ![Made by](https://img.shields.io/badge/Made_by-Xentris_Tech-1A1A1A?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
@@ -54,6 +54,7 @@ Estos son los skills que uso día a día en **Xentris Tech**: van desde posicion
 |-------|----------|
 | **[`xentris-desplegar-vps`](skills/xentris-desplegar-vps)** | Deja una app **Python/FastAPI** (Docker) corriendo **24/7** en un VPS Ubuntu con **HTTPS automático** (Caddy + Let's Encrypt), servicio **systemd** que arranca solo, y **auto-deploy** por GitHub Actions en cada push. |
 | **[`xentris-hostinger-a-vercel`](skills/xentris-hostinger-a-vercel)** | Apunta un dominio de **Hostinger** a un sitio en **Vercel** ✨ *sin perder el correo* ✨ — cambia solo los registros web (A/CNAME) y deja MX/SPF/DKIM intactos. |
+| **[`xentris-acceso-remoto-tailscale`](skills/xentris-acceso-remoto-tailscale)** | Configura **Escritorio Remoto (RDP) por Tailscale** en Windows — sin abrir puertos a internet — y lo blinda con **RemoteGuard**: una Tarea Programada (SYSTEM) que **auto-repara** Tailscale + RDP al arranque, al iniciar sesión y cada 10 min. Incluye las fallas conocidas de Tailscale en Windows y sus soluciones probadas. |
 
 ### 🧠 Continuidad de trabajo
 
@@ -61,6 +62,12 @@ Estos son los skills que uso día a día en **Xentris Tech**: van desde posicion
 |-------|----------|
 | **[`xentris-memoria-proyecto`](skills/xentris-memoria-proyecto)** | Crea y mantiene una **"memoria del proyecto"** (notas de continuidad) para que Claude retome el contexto exacto — qué se hizo, cómo va y cuál es el próximo paso — si se cierra la sesión. |
 | **[`xentris-acceso-rapido`](skills/xentris-acceso-rapido)** | Crea un **acceso en el escritorio de Windows** (`.bat` + `.lnk` con ícono de marca) que reabre Claude Code en el proyecto y **continúa la conversación** donde quedó. |
+
+### 📄 Documentos y marca personal
+
+| Skill | Qué hace |
+|-------|----------|
+| **[`xentris-hoja-de-vida`](skills/xentris-hoja-de-vida)** | Crea una **hoja de vida (CV / resume)** profesional en **HTML imprimible a PDF** (A4, dos columnas) con un **asistente de IA integrado** que invita al reclutador a *preguntar y evaluar* al candidato — chat offline por palabras clave que **se oculta al imprimir**. Recopila datos del portafolio, LinkedIn, GitHub y proyectos. Español e inglés. |
 
 ---
 
@@ -98,6 +105,8 @@ Una vez instalados, **no tienes que hacer nada especial**: Claude activa el skil
 > *"Sube el bot a un VPS que corra 24/7"* → activa `xentris-desplegar-vps`
 > *"Apunta mi dominio de Hostinger a Vercel sin perder el correo"* → activa `xentris-hostinger-a-vercel`
 > *"Guarda dónde vamos para no perder el hilo"* → activa `xentris-memoria-proyecto`
+> *"Hazme una hoja de vida con IA"* → activa `xentris-hoja-de-vida`
+> *"Quiero conectarme a este PC desde otro lado por Tailscale"* → activa `xentris-acceso-remoto-tailscale`
 
 También puedes invocarlos por su nombre con `/`.
 
@@ -119,7 +128,11 @@ claude-skills/
     │   ├── scripts/            # generador de worksheet en Excel
     │   └── templates/          # plantilla de salida
     ├── xentris-acceso-rapido/
+    ├── xentris-acceso-remoto-tailscale/
     ├── xentris-desplegar-vps/
+    ├── xentris-hoja-de-vida/
+    │   ├── SKILL.md
+    │   └── assets/             # plantilla-cv.html (diseño A4 + chat de IA)
     ├── xentris-hostinger-a-vercel/
     └── xentris-memoria-proyecto/
 ```

@@ -97,6 +97,33 @@
   .card.waiting{border-color:rgba(251,191,36,.42);}
   .card.paused{border-color:rgba(239,68,68,.4);}
 
+  /* ===== Tarjeta clicable: abre la ventana de ese agente ===== */
+  .card{cursor:pointer;position:relative;}
+  .card:hover,.card:focus-visible{border-color:var(--brand-2);transform:translateY(-2px);}
+  .card:focus-visible{outline:2px solid var(--brand-2);outline-offset:3px;}
+  .abrir{
+    display:flex;align-items:center;gap:6px;margin-top:auto;padding-top:2px;
+    font-size:11.5px;letter-spacing:.4px;text-transform:uppercase;color:var(--faint);
+    opacity:0;transition:opacity .2s ease,color .2s ease;
+  }
+  .card:hover .abrir,.card:focus-visible .abrir{opacity:1;color:var(--lila);}
+  @media (hover:none){ .abrir{opacity:1;} }         /* en tactil no hay hover */
+  /* En modo presentacion la tarjeta es de solo lectura: nada de abrir
+     terminales delante de un cliente. */
+  body.presenta .card{cursor:default;transform:none;}
+  body.presenta .abrir{display:none;}
+
+  /* ===== Aviso flotante ===== */
+  #aviso{
+    position:fixed;left:50%;bottom:26px;transform:translate(-50%,14px);
+    max-width:min(560px,92vw);padding:13px 18px;border-radius:var(--radius);
+    background:var(--surface-2);border:1px solid var(--border-strong);
+    box-shadow:var(--shadow);color:var(--text);font-size:13.5px;line-height:1.45;
+    opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;z-index:50;
+  }
+  #aviso.ver{opacity:1;transform:translate(-50%,0);}
+  #aviso.mal{border-color:rgba(239,68,68,.55);}
+
   .card-head{display:flex;align-items:center;gap:11px;}
   .dot{width:11px;height:11px;border-radius:50%;flex:none;}
   .working .dot{background:var(--green);box-shadow:0 0 0 0 rgba(34,197,94,.55);}
@@ -183,7 +210,8 @@
 <main class="grid" id="grid" role="list" aria-label="Sesiones de agentes" aria-live="polite" aria-busy="true">
   <div class="empty"><p>Cargando sesiones…</p></div>
 </main>
-<footer>Se actualiza cada 4 s · leyendo ~/.claude/projects · solo local (127.0.0.1:7777)</footer>
+<footer>Se actualiza cada 4 s · leyendo ~/.claude/projects · solo local (127.0.0.1:7777) · clic en una tarjeta para abrir esa sesión</footer>
+<div id="aviso" role="status" aria-live="polite"></div>
 
 <script>
 // ---- Iconos SVG (estilo Lucide, sin emojis) ----
@@ -197,6 +225,7 @@ const P = {
   monitor:'<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
   code:'<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>',
   inbox:'<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  abrir:'<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
 };
 function ic(name){return '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">'+(P[name]||'')+'</svg>';}
 
@@ -225,7 +254,9 @@ function render(data){
   grid.innerHTML=sessions.map(s=>{
     const working=s.status==='working';
     return `
-    <article class="card ${esc(s.status)}" role="listitem">
+    <article class="card ${esc(s.status)}" role="listitem" tabindex="0"
+             data-id="${esc(s.id)}" data-proj="${esc(s.projectName)}" data-status="${esc(s.status)}"
+             aria-label="Abrir la ventana de ${esc(s.projectName)}">
       <div class="card-head">
         <span class="dot" aria-hidden="true"></span>
         <div style="min-width:0">
@@ -246,6 +277,7 @@ function render(data){
         ${s.model?`<span>${ic('cpu')}${esc(s.model)}</span>`:''}
         <span>${ic('file')}<span class="tnum">${s.sizeKB}</span> KB</span>
       </div>
+      <div class="abrir">${ic('abrir')} Clic para abrir esta sesión</div>
     </article>`;
   }).join('');
 }
@@ -253,6 +285,54 @@ function render(data){
 async function refresh(){
   try{ const r=await fetch('/api/sessions'); render(await r.json()); }catch(e){}
 }
+
+// ---- Abrir la ventana del agente ----
+// Un clic en la tarjeta abre una terminal en la carpeta de esa sesión y retoma
+// la conversación con `claude --resume`. El servidor solo acepta ids que existan
+// en el disco: la carpeta sale del transcript, nunca del navegador.
+
+let avisoTimer;
+function aviso(texto, mal){
+  const el=document.getElementById('aviso');
+  el.textContent=texto;
+  el.classList.toggle('mal',!!mal);
+  el.classList.add('ver');
+  clearTimeout(avisoTimer);
+  avisoTimer=setTimeout(()=>el.classList.remove('ver'),mal?7000:4200);
+}
+
+async function abrirSesion(card){
+  if(document.body.classList.contains('presenta')) return;   // solo lectura ante clientes
+  const id=card.dataset.id, proj=card.dataset.proj;
+  // Retomar una sesión que ahora mismo está corriendo abriría una segunda ventana
+  // sobre el mismo hilo. Mejor preguntar que enredar la conversación.
+  if(card.dataset.status==='working'){
+    if(!confirm('"'+proj+'" está trabajando ahora mismo, probablemente en una ventana ya abierta.\n\n'
+      +'Abrir otra ventana sobre la misma conversación puede enredar el hilo.\n¿Abrirla de todos modos?')) return;
+  }
+  aviso('Abriendo '+proj+'…');
+  try{
+    const r=await fetch('/api/abrir',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-Mission-Control':'1'},
+      body:JSON.stringify({id})
+    });
+    const d=await r.json();
+    if(d.ok) aviso('Ventana abierta en '+d.cwd);
+    else aviso('No se pudo abrir: '+(d.error||'error desconocido'),true);
+  }catch(e){ aviso('No se pudo hablar con el servidor de Mission Control.',true); }
+}
+
+// Delegación: las tarjetas se repintan cada 4 s, así que el listener va en el grid.
+document.getElementById('grid').addEventListener('click',e=>{
+  const card=e.target.closest('.card');
+  if(card) abrirSesion(card);
+});
+document.getElementById('grid').addEventListener('keydown',e=>{
+  if(e.key!=='Enter'&&e.key!==' ') return;
+  const card=e.target.closest('.card');
+  if(card){ e.preventDefault(); abrirSesion(card); }
+});
 
 function togglePresenta(){
   const on=document.body.classList.toggle('presenta');

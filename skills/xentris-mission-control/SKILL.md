@@ -1,6 +1,6 @@
 ---
 name: xentris-mission-control
-description: Buena práctica de agente Xentris Tech. Instala "Mission Control", un panel local (Node, sin dependencias, puerto 7777, solo 127.0.0.1) que lee los transcripts de Claude Code en ~/.claude/projects y muestra en tiempo real qué hace cada sesión/agente — con semáforo de estado (trabajando/esperándote/pausada/inactiva), qué hace ahora en lenguaje humano, y un "modo presentación" para mostrárselo a clientes. Es la "capa visual" (el Windows) para observar agentes. Úsala cuando el usuario pida "mission control", "panel/dashboard de agentes", "ver qué hacen mis agentes", "observabilidad de agentes", "monitor de sesiones de Claude", "un tablero para orquestar agentes", o al montar el mismo panel en otro PC con agentes. Marca Xentris (paleta morada oficial, logo, Montserrat, iconos SVG). El panel funciona en cualquier OS; el launcher/.lnk es solo Windows.
+description: Buena práctica de agente Xentris Tech. Instala "Mission Control", un panel local (Node, sin dependencias, puerto 7777, solo 127.0.0.1) que lee los transcripts de Claude Code en ~/.claude/projects y muestra en tiempo real qué hace cada sesión/agente — con semáforo de estado (trabajando/esperándote/pausada/inactiva), qué hace ahora en lenguaje humano, y un "modo presentación" para mostrárselo a clientes. Cada tarjeta es clicable: abre esa sesion en su propia ventana (`claude --resume`). Es la "capa visual" (el Windows) para observar agentes. Úsala cuando el usuario pida "mission control", "panel/dashboard de agentes", "ver qué hacen mis agentes", "observabilidad de agentes", "monitor de sesiones de Claude", "un tablero para orquestar agentes", o al montar el mismo panel en otro PC con agentes. Marca Xentris (paleta oficial, logo, tipografia Mansfield/Cropar incrustada en base64, iconos SVG). El panel funciona en cualquier OS; el launcher/.lnk es solo Windows.
 ---
 
 # Mission Control — panel de observabilidad de agentes (Xentris Tech)
@@ -11,10 +11,14 @@ Mission Control es el **"Windows" de los agentes de IA**: una sola pantalla que 
 
 Por cada sesión muestra una tarjeta con: proyecto, **semáforo de estado** (🟢 Trabajando / 🟡 Esperándote / ⏸ Pausada / ⚪ Inactiva), qué hace ahora en una frase, la última instrucción del usuario, una línea de tiempo de acciones, el modelo y si usa subagentes. Trae un botón **"Modo presentación"** que oculta lo técnico para compartir pantalla con un cliente.
 
+**Un clic en cualquier tarjeta abre esa sesión en su propia ventana**, retomando la conversación donde iba (ver más abajo).
+
 ## Archivos de referencia (en `reference/`)
-- `server.js` — servidor Node puro (lee `~/.claude/projects`, sirve el dashboard, API `/api/sessions`). Portable a cualquier OS.
-- `index.html` — dashboard con la marca Xentris (paleta oficial, Montserrat, iconos SVG, accesible, responsive). El logo tiene fallback a texto si falta el PNG.
+- `server.js` — servidor Node puro (lee `~/.claude/projects`, sirve el dashboard, API `/api/sessions` y `POST /api/abrir` para abrir una sesión). Portable a cualquier OS.
+- `index.html` — dashboard base, accesible y responsive; el logo tiene fallback a texto si falta el PNG.
+  ⚠️ **Viene con Montserrat por CDN, que NO es la tipografia de Xentris.** No lo instales tal cual: pasalo siempre por `aplicar-marca.js` (paso 1.5).
 - `logo.png` — wordmark oficial de Xentris (opcional; si el proyecto tiene su propia marca, reemplázalo).
+- `aplicar-marca.js` — **obligatorio**: transforma `index.html` para cumplir el manual (quita el CDN de Google Fonts, incrusta Mansfield + Cropar en base64, corrige los tonos derivados, pone los títulos en itálica black y añade la barra degradada).
 
 ## Parámetros a definir antes de instalar
 1. **MC_DIR**: carpeta donde vivirá el panel. Por defecto `~/mission-control` (en Windows `C:\Users\<usuario>\mission-control`).
@@ -39,6 +43,26 @@ Copy-Item "<ruta-al-skill>\reference\logo.png"  "$mc\logo.png"  -Force
 # macOS / Linux
 mkdir -p ~/mission-control
 cp reference/server.js reference/index.html reference/logo.png ~/mission-control/
+```
+
+### 1.5. Aplicar el manual de marca (obligatorio)
+El `index.html` original trae Montserrat por CDN. Renómbralo a `index.html.orig`, copia
+`aplicar-marca.js` y ejecútalo: genera el `index.html` definitivo con las fuentes de marca
+incrustadas. Requiere el paquete de fuentes en
+`C:\Users\xentr\proyectos\xentris-empresa\marca\fonts` (ajusta `FONTS_DIR` en otro equipo).
+
+```powershell
+Move-Item "$mc\index.html" "$mc\index.html.orig" -Force
+Copy-Item "<ruta-al-skill>\reference\aplicar-marca.js" "$mc\aplicar-marca.js" -Force
+node "$mc\aplicar-marca.js"   # debe reportar: 0 CDN externos, 0 Montserrat, 4 @font-face
+```
+
+**Verifica mirando, no confiando:** los `.replace` de cadena exacta fallan en silencio si el
+HTML cambia de versión, y las fuentes se sustituyen sin avisar. Renderiza y revisa la captura:
+
+```powershell
+& "C:\Program Files\Google\Chrome\Application\chrome.exe" --headless --disable-gpu `
+  --window-size=1500,1000 --screenshot="$mc\verificacion.png" "http://127.0.0.1:7777/"
 ```
 
 ### 2. Arrancar y verificar
@@ -68,7 +92,8 @@ start "" http://localhost:7777
 "@ | Set-Content -LiteralPath $bat -Encoding ascii
 
 $desktop = [Environment]::GetFolderPath('Desktop')
-$ico = "$env:USERPROFILE\xentris-icon.ico"   # ícono de marca si existe
+$ico = "$mc\marca-icon.ico"   # generar con PIL desde marca\isotipo-violeta.png
+# OJO (manual): logo-x.png NO tiene transparencia y deja recuadro blanco. Usar isotipo-violeta.png.
 $ws = New-Object -ComObject WScript.Shell
 $lnk = $ws.CreateShortcut((Join-Path $desktop "Mission Control.lnk"))
 $lnk.TargetPath = $bat
@@ -84,13 +109,54 @@ En macOS/Linux, en vez del `.lnk`, deja un alias o un `mission-control.sh` con `
 - Doble clic en **"Mission Control"** (el `.lnk`) abre el panel; si el servidor ya corre, solo abre la pestaña.
 - Recuérdale el **modo presentación** (botón arriba a la derecha) para mostrarle el trabajo a un cliente.
 
+## Clic en una tarjeta → abre esa sesión
+
+Cada tarjeta es un botón: al hacer clic (o Enter/Espacio, que también funcionan) se abre una
+terminal en la carpeta de esa sesión y se retoma la conversación con `claude --resume <id>`.
+Es la diferencia entre *ver* que un agente te espera y *poder atenderlo* sin buscar la ventana.
+
+**Cómo está resuelto y por qué así:**
+
+- **No se intenta enfocar la ventana existente.** Mapear una sesión a una ventana de Windows
+  obliga a adivinar por el título de la terminal, y eso se rompe con cada cambio de shell.
+  Retomar la conversación es determinista y deja el hilo intacto.
+- **Si la sesión está `working`, el panel pide confirmación** antes de abrir: retomar un hilo
+  que ya corre en otra ventana abriría una segunda vista sobre la misma conversación.
+- **En modo presentación el clic queda inhabilitado.** Nadie quiere que se abran terminales
+  mientras le comparte pantalla a un cliente.
+
+**Seguridad del endpoint `POST /api/abrir`** (importante: es el único que ejecuta algo):
+
+- Del cuerpo solo se lee un **id**, que se valida con una expresión regular y se busca entre
+  las sesiones reales del disco. **La carpeta sale del transcript, nunca de la petición** —
+  así no hay forma de inyectar una ruta ni un comando.
+- Exige la cabecera `X-Mission-Control: 1`, lo que obliga a preflight CORS y deja fuera a
+  cualquier web que intente golpear el puerto 7777 desde el navegador del usuario. Además se
+  valida el `Origin` y se corta el cuerpo a 4 KB.
+- El servidor sigue escuchando **solo en 127.0.0.1**. No lo expongas: ahora, además de leer
+  transcripts, abre procesos.
+
+En Windows abre un `.bat` temporal (evita el infierno de comillas de `start` + `cmd /k`); en
+macOS usa `osascript` con Terminal y en Linux `x-terminal-emulator`.
+
 ## Cómo ajustar (parámetros dentro de `server.js`)
 Al inicio del archivo hay constantes fáciles de tocar:
 - `PORT` (7777), `MAX_AGE_DAYS` (7 — cuántos días de sesiones mostrar), `MAX_SESSIONS` (30), `WORKING_WINDOW_MS` (120000 — cuánto silencio cuenta como "dejó de trabajar"), `TAIL_BYTES` (cuánto lee del final de cada transcript).
 La función `describeTool()` traduce cada herramienta a una frase en español; agrégale casos si aparecen herramientas nuevas.
 
 ## Marca (para mantenerlo on-brand Xentris)
-El `index.html` usa la **paleta oficial del brandbook**: morado `#8B3BC0`, navy `#1B123F`/`#0D0D0D`, lila `#c9a3ec`; fuente **Montserrat**; **iconos SVG** (nunca emojis en la interfaz); foco visible, `prefers-reduced-motion` y números tabulares. Para otra marca, cambia solo los tokens `:root` y el `logo.png`.
+El `index.html` de `reference/` viene con **Montserrat y un CDN de Google Fonts** — eso **no es la marca**:
+el manual (`xentris-manual-marca`, MANUAL p.22) dice que el cuerpo va en **Mansfield Medium**, los
+títulos en **Mansfield Black Italic** y la palabra XENTRIS **siempre en Cropar**. Por eso el paso 1.5
+ejecuta `aplicar-marca.js`, que deja:
+
+- Paleta oficial: negro `#0D0D0D`, índigo `#1B123F`, púrpura `#331659`, violeta `#8B3BC0`, blanco `#FFFFFF`;
+  derivados **del manual** (`--hi:#a95fd6`, `--glow:#c78ce8`) — no `#c9a3ec` ni violetas inventados.
+- Fuentes **incrustadas en base64** (cero peticiones externas; el panel funciona sin internet).
+- **Barra degradada** bajo el título — el recurso gráfico más repetido del manual.
+- **Iconos SVG** (nunca emojis en la interfaz), foco visible, `prefers-reduced-motion`, números tabulares.
+
+Para otra marca, cambia los tokens `:root`, el `logo.png` y las rutas de fuentes en `aplicar-marca.js`.
 
 ## Buenas prácticas Xentris Tech (contexto)
 - **Observabilidad = supervisión humana visible.** Es la última capa de gobernanza de agentes: antes de escalar una automatización con IA, asegúrate de poder **ver y contar** lo que hace. Combínalo con [[xentris-orquestador]] (cuando corras varios agentes en paralelo, este panel te dice el estado de cada uno).

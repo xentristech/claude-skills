@@ -6,6 +6,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { spawn } = require('child_process');
 
 const PORT = 7777;
 const PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
@@ -223,9 +224,84 @@ function collectSessions() {
   return sessions;
 }
 
+// ---------- abrir una sesión en su propia ventana ----------
+//
+// Al hacer clic en una tarjeta se abre una terminal en la carpeta de esa sesión
+// y se retoma la conversación con `claude --resume <id>`.
+//
+// Seguridad: NO se ejecuta nada que venga en la petición. Del cuerpo solo se lee
+// un id, se valida su forma y se busca entre las sesiones reales del disco; la
+// carpeta sale del transcript, nunca del cliente. Ademas se exige la cabecera
+// X-Mission-Control, que obliga a preflight CORS y deja fuera a cualquier web
+// que intente golpear este puerto desde el navegador.
+
+const ID_VALIDO = /^[A-Za-z0-9][A-Za-z0-9._-]{7,63}$/;
+
+function comandoTerminal(cwd, id, titulo) {
+  if (process.platform === 'win32') {
+    // Un .bat temporal evita el infierno de comillas de `start` + `cmd /k`.
+    const bat = path.join(os.tmpdir(), 'mc-abrir-' + id + '.bat');
+    fs.writeFileSync(bat,
+      '@echo off\r\n'
+      + 'title ' + titulo.replace(/[\r\n%&|<>^]/g, ' ') + '\r\n'
+      + 'cd /d "' + cwd + '"\r\n'
+      + 'claude --resume ' + id + '\r\n', 'ascii');
+    return { cmd: 'cmd', args: ['/c', 'start', titulo, bat] };
+  }
+  const linea = 'cd ' + JSON.stringify(cwd) + ' && claude --resume ' + id;
+  if (process.platform === 'darwin') {
+    return { cmd: 'osascript', args: ['-e', 'tell application "Terminal" to do script ' + JSON.stringify(linea)] };
+  }
+  return { cmd: 'x-terminal-emulator', args: ['-e', 'sh', '-c', linea + '; exec $SHELL'] };
+}
+
+function abrirSesion(id) {
+  if (!ID_VALIDO.test(id)) return { ok: false, error: 'Identificador de sesión inválido.' };
+  const sesion = collectSessions().find(s => s.id === id);
+  if (!sesion) return { ok: false, error: 'Esa sesión ya no aparece en el disco.' };
+  if (!sesion.cwd || !fs.existsSync(sesion.cwd)) {
+    return { ok: false, error: 'La sesión no registra una carpeta de trabajo accesible.' };
+  }
+  const titulo = 'Claude - ' + sesion.projectName;
+  try {
+    const { cmd, args } = comandoTerminal(sesion.cwd, id, titulo);
+    const hijo = spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: false });
+    hijo.on('error', e => console.log('No se pudo abrir la terminal: ' + e.message));
+    hijo.unref();
+    console.log('Abriendo sesión ' + id + ' en ' + sesion.cwd);
+    return { ok: true, project: sesion.projectName, cwd: sesion.cwd };
+  } catch (e) {
+    return { ok: false, error: 'No se pudo abrir la terminal: ' + String(e.message || e) };
+  }
+}
+
 // ---------- servidor ----------
 
 const server = http.createServer((req, res) => {
+  // Abrir la ventana de un agente
+  if (req.url === '/api/abrir' && req.method === 'POST') {
+    const origen = req.headers.origin;
+    const permitido = !origen || /^http:\/\/(127\.0\.0\.1|localhost):/.test(origen);
+    if (req.headers['x-mission-control'] !== '1' || !permitido) {
+      res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ ok: false, error: 'Petición no autorizada.' }));
+      return;
+    }
+    let cuerpo = '';
+    req.on('data', c => {
+      cuerpo += c;
+      if (cuerpo.length > 4096) req.destroy();   // no aceptamos cuerpos grandes
+    });
+    req.on('end', () => {
+      let out;
+      try { out = abrirSesion((JSON.parse(cuerpo) || {}).id || ''); }
+      catch (e) { out = { ok: false, error: 'Petición mal formada.' }; }
+      res.writeHead(out.ok ? 200 : 400, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify(out));
+    });
+    return;
+  }
+
   if (req.url.startsWith('/api/sessions')) {
     let payload;
     try {

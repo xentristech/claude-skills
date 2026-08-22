@@ -85,6 +85,61 @@ function describeTool(name, input) {
   return name || 'Trabajando';
 }
 
+// ---------- resumen del proyecto ----------
+//
+// Para la pastilla que sale al pasar el mouse por el nombre del proyecto. Se lee
+// del propio repo, por orden de preferencia, y se cachea por carpeta (mirando la
+// fecha del archivo) para no releer en disco cada 4 segundos.
+
+const CANDIDATOS_RESUMEN = ['.claude/RESUMEN.md', 'README.md', 'CLAUDE.md', 'docs/README.md'];
+const cacheResumen = new Map();   // cwd -> { mtime, resumen }
+
+/** Primer párrafo de verdad: sin títulos, insignias, comentarios ni frontmatter. */
+function primerParrafo(texto) {
+  const lineas = texto.split(/\r?\n/);
+  let i = 0;
+  if (lineas[0] && lineas[0].trim() === '---') {          // saltar frontmatter YAML
+    i = 1;
+    while (i < lineas.length && lineas[i].trim() !== '---') i++;
+    i++;
+  }
+  const partes = [];
+  for (; i < lineas.length; i++) {
+    const l = lineas[i].trim();
+    if (partes.length && !l) break;                       // fin del párrafo
+    if (!l) continue;
+    if (/^(#{1,6}\s|<!--|<img|<p|<div|!\[|\[!\[|---|===|\||```)/.test(l)) continue;
+    if (/^[-*+]\s/.test(l) && !partes.length) continue;   // lista antes del texto
+    partes.push(l);
+    if (partes.join(' ').length > 320) break;
+  }
+  let s = partes.join(' ')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')              // enlaces markdown
+    .replace(/[*_`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (s.length > 300) s = s.slice(0, 299) + '…';
+  return s;
+}
+
+function resumenProyecto(cwd) {
+  if (!cwd) return null;
+  try {
+    for (const rel of CANDIDATOS_RESUMEN) {
+      const f = path.join(cwd, rel);
+      let st;
+      try { st = fs.statSync(f); } catch (e) { continue; }
+      const cache = cacheResumen.get(cwd);
+      if (cache && cache.mtime === st.mtimeMs && cache.fuente === rel) return cache.resumen;
+      const texto = primerParrafo(fs.readFileSync(f, 'utf8'));
+      const resumen = texto ? { texto, fuente: rel } : null;
+      cacheResumen.set(cwd, { mtime: st.mtimeMs, fuente: rel, resumen });
+      if (resumen) return resumen;
+    }
+  } catch (e) { /* si el proyecto no se deja leer, la pastilla simplemente no aparece */ }
+  return null;
+}
+
 // Analiza los eventos del final del transcript y arma el estado de la sesión
 function analyzeSession(file, projectFolder) {
   const stat = fs.statSync(file);
@@ -103,6 +158,11 @@ function analyzeSession(file, projectFolder) {
   let firstTs = null, lastTs = null;
   let toolCount = 0, subagentActivity = 0;
   const timeline = []; // últimas acciones humanizadas
+  // Artefactos que esta sesión publicó. La llamada trae la descripción y el
+  // resultado trae la URL ("Published <archivo> at <url>"), así que hay que
+  // emparejar tool_use con su tool_result por id.
+  const artefactosPendientes = new Map();
+  const artefactos = new Map();   // url -> { url, descripcion, favicon }
 
   for (const ev of events) {
     if (ev.cwd) cwd = ev.cwd;
@@ -136,7 +196,22 @@ function analyzeSession(file, projectFolder) {
             lastUserPromptTs = ev.timestamp;
             lastEventKind = 'user_prompt';
           }
-          if (c.type === 'tool_result') lastEventKind = 'tool_result';
+          if (c.type === 'tool_result') {
+            lastEventKind = 'tool_result';
+            const pend = artefactosPendientes.get(c.tool_use_id);
+            if (pend) {
+              artefactosPendientes.delete(c.tool_use_id);
+              let texto = c.content;
+              if (Array.isArray(texto)) {
+                texto = texto.map(x => (x && x.text) || '').join(' ');
+              }
+              const m = String(texto || '').match(/https:\/\/claude\.ai\/code\/artifact\/[A-Za-z0-9-]+/);
+              const url = pend.url || (m && m[0]);
+              // Un artefacto republicado vuelve a aparecer: nos quedamos con la
+              // descripción más reciente, no con la primera.
+              if (url) artefactos.set(url, { url, descripcion: pend.descripcion, favicon: pend.favicon });
+            }
+          }
         }
       }
     }
@@ -146,6 +221,17 @@ function analyzeSession(file, projectFolder) {
         if (c.type === 'tool_use') {
           toolCount++;
           lastEventKind = 'tool_use';
+          if (c.name === 'Artifact') {
+            const inp = c.input || {};
+            // 'publish' es la acción por defecto; las demás (read, comments…) no crean nada.
+            if (!inp.action || inp.action === 'publish') {
+              artefactosPendientes.set(c.id, {
+                url: inp.url || null,
+                descripcion: shorten(inp.description || inp.title || inp.label, 110),
+                favicon: (inp.favicon || '').slice(0, 4),
+              });
+            }
+          }
           timeline.push({ ts: ev.timestamp, text: describeTool(c.name, c.input), tool: c.name });
           if (timeline.length > 12) timeline.shift();
         }
@@ -200,6 +286,8 @@ function analyzeSession(file, projectFolder) {
     subagents: subagentActivity > 0,
     timeline: timeline.slice(-6).reverse(),
     sizeKB: Math.round(stat.size / 1024),
+    resumen: resumenProyecto(cwd),
+    artefactos: Array.from(artefactos.values()).slice(-3).reverse(),
   };
 }
 

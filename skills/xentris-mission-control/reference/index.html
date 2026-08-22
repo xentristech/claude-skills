@@ -141,6 +141,49 @@
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
   }
   .slug{color:var(--muted);font-size:11.5px;display:flex;align-items:center;gap:6px;margin-top:2px;}
+
+  /* ===== Nombre del proyecto + pastilla de resumen al pasar el mouse ===== */
+  .proyecto{
+    display:inline-flex;align-items:center;gap:5px;position:relative;
+    border-radius:5px;padding:1px 3px;margin:-1px -3px;
+  }
+  .proyecto[data-resumen]{cursor:help;text-decoration:underline dotted var(--faint);text-underline-offset:3px;}
+  .proyecto[data-resumen]:hover,.proyecto[data-resumen]:focus-visible{color:var(--lila);}
+  .pastilla{
+    position:absolute;top:calc(100% + 9px);left:-4px;z-index:40;
+    width:max-content;max-width:min(330px,72vw);
+    background:var(--surface-2);border:1px solid var(--border-strong);
+    border-radius:11px;padding:11px 13px;box-shadow:var(--shadow);
+    color:var(--text);font-size:12.5px;line-height:1.5;text-align:left;
+    opacity:0;visibility:hidden;transform:translateY(-4px);
+    transition:opacity .16s ease,transform .16s ease,visibility .16s;
+    pointer-events:none;white-space:normal;
+  }
+  .proyecto:hover .pastilla,.proyecto:focus-visible .pastilla{opacity:1;visibility:visible;transform:translateY(0);}
+  .pastilla .p-et{
+    display:block;font-size:9.5px;font-weight:700;letter-spacing:2px;
+    text-transform:uppercase;color:var(--lila);margin-bottom:5px;
+  }
+  .pastilla .p-fuente{
+    display:block;margin-top:8px;padding-top:7px;border-top:1px solid var(--border);
+    color:var(--faint);font-size:10.5px;
+  }
+  /* La tarjeta apuntada va por encima de sus hermanas, o la pastilla queda debajo. */
+  .card:hover,.card:focus-within{z-index:20;}
+
+  /* ===== Artefactos publicados por la sesión ===== */
+  .artefactos{display:flex;flex-wrap:wrap;gap:7px;}
+  .chip{
+    display:inline-flex;align-items:center;gap:6px;max-width:100%;
+    padding:5px 11px;border-radius:99px;border:1px solid var(--border-strong);
+    background:rgba(139,59,192,.1);color:var(--lila);
+    font-size:11.5px;font-weight:700;text-decoration:none;
+    transition:border-color .18s ease,background .18s ease;
+  }
+  .chip:hover{border-color:var(--brand-2);background:rgba(139,59,192,.2);}
+  .chip .emo{font-size:12.5px;line-height:1;}
+  .chip .tx{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:210px;font-weight:500;}
+  .chip svg{width:12px;height:12px;flex:none;}
   .slug .ic{font-size:13px;}
   .badge{
     margin-left:auto;font-size:11.5px;font-weight:600;padding:4px 11px;border-radius:20px;
@@ -267,7 +310,15 @@ function render(data){
         <span class="dot" aria-hidden="true"></span>
         <div style="min-width:0">
           <div class="proj">${esc(s.aiTitle||s.projectName)}</div>
-          <div class="slug">${ic('folder')}${esc(s.projectName)}${s.subagents?' '+ic('branch')+' subagentes':''}</div>
+          <div class="slug">
+            <span class="proyecto"${s.resumen?' data-resumen tabindex="0"':''}>
+              ${ic('folder')}${esc(s.projectName)}
+              ${s.resumen?`<span class="pastilla" role="tooltip"
+                ><span class="p-et">De qué va este proyecto</span>${esc(s.resumen.texto)}<span
+                class="p-fuente">${ic('file')}${esc(s.resumen.fuente)}</span></span>`:''}
+            </span>
+            ${s.subagents?ic('branch')+' subagentes':''}
+          </div>
         </div>
         <span class="badge">${esc(s.statusLabel)} · ${ago(s.idleSeconds)}</span>
       </div>
@@ -278,6 +329,11 @@ function render(data){
       ${s.lastUserPrompt?`<div class="prompt"><b>Instrucción:</b> ${esc(s.lastUserPrompt)}</div>`:''}
       ${s.timeline.length?`<div class="timeline">${s.timeline.map(t=>
         `<div class="tl-item"><span class="t mono tnum">${hora(t.ts)}</span><span class="tx">${esc(t.text)}</span></div>`).join('')}</div>`:''}
+      ${(s.artefactos&&s.artefactos.length)?`<div class="artefactos">${s.artefactos.map(a=>
+        `<a class="chip" href="${esc(a.url)}" target="_blank" rel="noopener"
+            title="${esc(a.descripcion||a.url)}"
+          >${a.favicon?`<span class="emo">${esc(a.favicon)}</span>`:ic('abrir')}<span class="tx"
+          >${esc(a.descripcion||'Artefacto publicado')}</span>${ic('abrir')}</a>`).join('')}</div>`:''}
       <div class="meta">
         <span>${ic('terminal')}<span class="tnum">${s.toolCount}</span> acciones</span>
         ${s.model?`<span>${ic('cpu')}${esc(s.model)}</span>`:''}
@@ -348,6 +404,8 @@ async function abrirSesion(card){
 
 // Delegación: las tarjetas se repintan cada 4 s, así que el listener va en el grid.
 document.getElementById('grid').addEventListener('click',e=>{
+  // Un clic en el enlace de un artefacto abre el artefacto, no la sesión.
+  if(e.target.closest('a')) { e.stopPropagation(); return; }
   const card=e.target.closest('.card');
   if(card) abrirSesion(card);
 });

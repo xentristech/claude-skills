@@ -158,6 +158,31 @@ En Windows la ventana nueva sale de un `.bat` temporal (evita el infierno de com
 `start` + `cmd /k`); en macOS usa `osascript` con Terminal y en Linux `x-terminal-emulator`.
 El enfoque de ventanas es solo Windows; en otros sistemas siempre abre una nueva.
 
+## Resumen del proyecto y artefactos publicados
+
+Dos datos más que el panel saca sin que nadie los mantenga a mano.
+
+**Pastilla de resumen.** Al pasar el mouse (o tabular) sobre el nombre del proyecto sale una
+pastilla que dice de qué va ese proyecto, y **de qué archivo lo sacó**. El servidor busca por
+orden `.claude/RESUMEN.md`, `README.md`, `CLAUDE.md`, `docs/README.md`, toma el primer párrafo
+de verdad — saltándose frontmatter, títulos, insignias y bloques HTML — y lo recorta a 300
+caracteres. Se cachea por carpeta contra la fecha del archivo, así que no se relee en disco en
+cada refresco. Si el proyecto no tiene ninguno de esos archivos, simplemente no hay pastilla:
+el nombre se queda como estaba.
+
+Para escribir un resumen a medida sin tocar el README, crea `.claude/RESUMEN.md` en el
+proyecto: tiene prioridad sobre todo lo demás.
+
+**Chips de artefacto.** Si la sesión publicó artefactos, aparecen como enlaces al pie de la
+tarjeta con su emoji y su descripción. Salen de emparejar cada llamada al `Artifact` con su
+resultado: la llamada trae la descripción y el favicon, y el resultado trae la URL en el texto
+`Published <archivo> at <url>`. Un artefacto republicado se queda con su descripción más
+reciente, no con la primera, y solo cuentan las publicaciones (no las lecturas ni los
+comentarios). Se muestran los tres últimos.
+
+Un clic en un chip abre el artefacto, **no** la sesión: el manejador de la tarjeta ignora los
+clics que caen sobre un enlace.
+
 ## Cómo ajustar (parámetros dentro de `server.js`)
 Al inicio del archivo hay constantes fáciles de tocar:
 - `PORT` (7777), `MAX_AGE_DAYS` (7 — cuántos días de sesiones mostrar), `MAX_SESSIONS` (30), `WORKING_WINDOW_MS` (120000 — cuánto silencio cuenta como "dejó de trabajar"), `TAIL_BYTES` (cuánto lee del final de cada transcript).

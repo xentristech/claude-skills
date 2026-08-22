@@ -9,7 +9,7 @@ Mission Control es el **"Windows" de los agentes de IA**: una sola pantalla que 
 
 **Cómo funciona:** cada sesión de Claude Code escribe todo lo que hace, en tiempo real, en archivos `.jsonl` dentro de `~/.claude/projects/`. Esa información **ya existe**; Mission Control solo la lee y la pinta. Es un servidor Node **sin dependencias**, que escucha **solo en 127.0.0.1** (nada sale del equipo), en el puerto **7777**, y el dashboard se refresca cada 4 s.
 
-Por cada sesión muestra una tarjeta con: proyecto, **semáforo de estado** (🟢 Trabajando / 🟡 Esperándote / ⏸ Pausada / ⚪ Inactiva), qué hace ahora en una frase, la última instrucción del usuario, una línea de tiempo de acciones, el modelo y si usa subagentes. Trae un botón **"Modo presentación"** que oculta lo técnico para compartir pantalla con un cliente.
+Por cada sesión muestra una tarjeta encabezada por el **nombre de la conversación** (el mismo que lleva la ventana de la terminal), con la carpeta del proyecto debajo, **semáforo de estado** (🟢 Trabajando / 🟡 Esperándote / ⏸ Pausada / ⚪ Inactiva), qué hace ahora en una frase, la última instrucción del usuario, una línea de tiempo de acciones, el modelo y si usa subagentes. Trae un botón **"Modo presentación"** que oculta lo técnico para compartir pantalla con un cliente.
 
 **Un clic en cualquier tarjeta abre esa sesión en su propia ventana**, retomando la conversación donde iba (ver más abajo).
 
@@ -18,6 +18,7 @@ Por cada sesión muestra una tarjeta con: proyecto, **semáforo de estado** (�
 - `index.html` — dashboard base, accesible y responsive; el logo tiene fallback a texto si falta el PNG.
   ⚠️ **Viene con Montserrat por CDN, que NO es la tipografia de Xentris.** No lo instales tal cual: pasalo siempre por `aplicar-marca.js` (paso 1.5).
 - `logo.png` — wordmark oficial de Xentris (opcional; si el proyecto tiene su propia marca, reemplázalo).
+- `enfocar.ps1` — trae al frente la ventana que una sesión ya tiene abierta (solo Windows). Si falta, el panel simplemente abre una ventana nueva cada vez.
 - `aplicar-marca.js` — **obligatorio**: transforma `index.html` para cumplir el manual (quita el CDN de Google Fonts, incrusta Mansfield + Cropar en base64, corrige los tonos derivados, pone los títulos en itálica black y añade la barra degradada).
 
 ## Parámetros a definir antes de instalar
@@ -117,27 +118,45 @@ Es la diferencia entre *ver* que un agente te espera y *poder atenderlo* sin bus
 
 **Cómo está resuelto y por qué así:**
 
-- **No se intenta enfocar la ventana existente.** Mapear una sesión a una ventana de Windows
-  obliga a adivinar por el título de la terminal, y eso se rompe con cada cambio de shell.
-  Retomar la conversación es determinista y deja el hilo intacto.
-- **Si la sesión está `working`, el panel pide confirmación** antes de abrir: retomar un hilo
-  que ya corre en otra ventana abriría una segunda vista sobre la misma conversación.
+- **Primero enfoca la ventana que ya existe.** Solo si no encuentra ninguna abre una nueva.
+  Esto era lo que faltaba: sin ello, hacer clic en una sesión ya abierta creaba una segunda
+  ventana sobre el mismo hilo.
+- **Cómo la encuentra** (esta es la parte no obvia): Claude Code pone el nombre de la
+  conversación en el título de la ventana de la terminal, y guarda ese mismo texto en el
+  transcript como evento `ai-title`. Comparar uno con otro da un puente fiable entre sesión y
+  ventana — no hay PID en el transcript, así que este es el único enlace disponible.
+  `enfocar.ps1` enumera las ventanas, ignora el glifo de estado que Claude antepone y trae la
+  coincidencia al frente.
+- **Si la sesión está `working` y no se halló su ventana**, el panel pregunta antes de abrir:
+  duplicar un hilo activo solo lo enreda. Si sí la halló, la enfoca sin preguntar nada.
 - **En modo presentación el clic queda inhabilitado.** Nadie quiere que se abran terminales
   mientras le comparte pantalla a un cliente.
+
+**Dos trampas de Windows que ya están resueltas en `enfocar.ps1`:**
+
+1. `GetWindowTextW` **necesita `CharSet=CharSet.Unicode`** en el `DllImport`. Sin eso el
+   marshaller lee la cadena ancha como ANSI y **cada título se corta en su primer carácter**
+   — sin error, solo resultados vacíos que parecen "no hay ventanas".
+2. Windows **bloquea `SetForegroundWindow`** desde un proceso que no está al frente. Hay que
+   engancharse con `AttachThreadInput` al hilo de la ventana que sí lo está, pedir el foco y
+   soltar.
 
 **Seguridad del endpoint `POST /api/abrir`** (importante: es el único que ejecuta algo):
 
 - Del cuerpo solo se lee un **id**, que se valida con una expresión regular y se busca entre
-  las sesiones reales del disco. **La carpeta sale del transcript, nunca de la petición** —
-  así no hay forma de inyectar una ruta ni un comando.
+  las sesiones reales del disco. **La carpeta y el título salen del transcript, nunca de la
+  petición** — así no hay forma de inyectar una ruta ni un comando.
+- El título va a PowerShell por **variable de entorno**, no por argumento: cero comillas que
+  escapar y ninguna superficie de inyección.
 - Exige la cabecera `X-Mission-Control: 1`, lo que obliga a preflight CORS y deja fuera a
   cualquier web que intente golpear el puerto 7777 desde el navegador del usuario. Además se
   valida el `Origin` y se corta el cuerpo a 4 KB.
 - El servidor sigue escuchando **solo en 127.0.0.1**. No lo expongas: ahora, además de leer
   transcripts, abre procesos.
 
-En Windows abre un `.bat` temporal (evita el infierno de comillas de `start` + `cmd /k`); en
-macOS usa `osascript` con Terminal y en Linux `x-terminal-emulator`.
+En Windows la ventana nueva sale de un `.bat` temporal (evita el infierno de comillas de
+`start` + `cmd /k`); en macOS usa `osascript` con Terminal y en Linux `x-terminal-emulator`.
+El enfoque de ventanas es solo Windows; en otros sistemas siempre abre una nueva.
 
 ## Cómo ajustar (parámetros dentro de `server.js`)
 Al inicio del archivo hay constantes fáciles de tocar:

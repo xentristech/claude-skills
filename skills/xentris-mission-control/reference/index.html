@@ -134,7 +134,12 @@
     .working .dot{animation:pulse 1.7s infinite;}
     @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.55);}50%{box-shadow:0 0 0 7px rgba(34,197,94,0);}}
   }
-  .proj{font-weight:700;font-size:15.5px;line-height:1.2;}
+  /* Ahora el titular es el nombre de la conversación (el mismo que lleva la
+     ventana), que puede ser largo: se acota a dos líneas para no descuadrar. */
+  .proj{
+    font-weight:700;font-size:15.5px;line-height:1.25;overflow-wrap:anywhere;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  }
   .slug{color:var(--muted);font-size:11.5px;display:flex;align-items:center;gap:6px;margin-top:2px;}
   .slug .ic{font-size:13px;}
   .badge{
@@ -226,6 +231,7 @@ const P = {
   code:'<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>',
   inbox:'<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
   abrir:'<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  folder:'<path d="M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2z"/>',
 };
 function ic(name){return '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">'+(P[name]||'')+'</svg>';}
 
@@ -255,13 +261,13 @@ function render(data){
     const working=s.status==='working';
     return `
     <article class="card ${esc(s.status)}" role="listitem" tabindex="0"
-             data-id="${esc(s.id)}" data-proj="${esc(s.projectName)}" data-status="${esc(s.status)}"
-             aria-label="Abrir la ventana de ${esc(s.projectName)}">
+             data-id="${esc(s.id)}" data-proj="${esc(s.aiTitle||s.projectName)}" data-status="${esc(s.status)}"
+             aria-label="Abrir la ventana de ${esc(s.aiTitle||s.projectName)}">
       <div class="card-head">
         <span class="dot" aria-hidden="true"></span>
         <div style="min-width:0">
-          <div class="proj">${esc(s.projectName)}</div>
-          <div class="slug">${esc(s.slug||s.id.slice(0,8))}${s.subagents?' '+ic('branch')+' subagentes':''}</div>
+          <div class="proj">${esc(s.aiTitle||s.projectName)}</div>
+          <div class="slug">${ic('folder')}${esc(s.projectName)}${s.subagents?' '+ic('branch')+' subagentes':''}</div>
         </div>
         <span class="badge">${esc(s.statusLabel)} · ${ago(s.idleSeconds)}</span>
       </div>
@@ -301,24 +307,41 @@ function aviso(texto, mal){
   avisoTimer=setTimeout(()=>el.classList.remove('ver'),mal?7000:4200);
 }
 
+function pedir(id,soloEnfocar){
+  return fetch('/api/abrir',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-Mission-Control':'1'},
+    body:JSON.stringify({id,soloEnfocar})
+  }).then(r=>r.json());
+}
+
 async function abrirSesion(card){
   if(document.body.classList.contains('presenta')) return;   // solo lectura ante clientes
   const id=card.dataset.id, proj=card.dataset.proj;
-  // Retomar una sesión que ahora mismo está corriendo abriría una segunda ventana
-  // sobre el mismo hilo. Mejor preguntar que enredar la conversación.
-  if(card.dataset.status==='working'){
-    if(!confirm('"'+proj+'" está trabajando ahora mismo, probablemente en una ventana ya abierta.\n\n'
-      +'Abrir otra ventana sobre la misma conversación puede enredar el hilo.\n¿Abrirla de todos modos?')) return;
-  }
-  aviso('Abriendo '+proj+'…');
   try{
-    const r=await fetch('/api/abrir',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','X-Mission-Control':'1'},
-      body:JSON.stringify({id})
-    });
-    const d=await r.json();
-    if(d.ok) aviso('Ventana abierta en '+d.cwd);
+    // Primero intentamos traer al frente la ventana que ya existe. Solo si no
+    // hay ninguna se abre una nueva — y si la sesión está trabajando, se
+    // pregunta antes, porque duplicarla enreda el hilo.
+    aviso('Buscando la ventana de "'+proj+'"…');
+    let d=await pedir(id,true);
+    if(d.ok&&d.accion==='enfocada'){
+      aviso(d.varias
+        ? 'Ventana traída al frente. Ojo: hay más de una con ese mismo nombre.'
+        : 'Ya estaba abierta — la traje al frente.');
+      return;
+    }
+    if(!d.ok){ aviso('No se pudo: '+(d.error||'error desconocido'),true); return; }
+
+    if(card.dataset.status==='working'){
+      if(!confirm('"'+proj+'" está trabajando ahora mismo, pero no encontré su ventana abierta.\n\n'
+        +'Abrir una nueva crearía una segunda vista sobre la misma conversación.\n¿Abrirla de todos modos?')) {
+        aviso('No se abrió nada.');
+        return;
+      }
+    }
+    aviso('Abriendo '+proj+'…');
+    d=await pedir(id,false);
+    if(d.ok) aviso('Ventana nueva abierta en '+d.cwd);
     else aviso('No se pudo abrir: '+(d.error||'error desconocido'),true);
   }catch(e){ aviso('No se pudo hablar con el servidor de Mission Control.',true); }
 }

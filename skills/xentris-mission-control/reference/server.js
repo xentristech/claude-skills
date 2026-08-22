@@ -92,6 +92,11 @@ function analyzeSession(file, projectFolder) {
   if (events.length === 0) return null;
 
   let cwd = null, slug = null, model = null, gitBranch = null, version = null;
+  // Claude Code pone el titulo de la conversacion en la ventana de la terminal y
+  // lo guarda aqui como evento `ai-title`. Es el unico puente fiable entre una
+  // sesion y su ventana abierta: con el podemos enfocar la que ya existe en vez
+  // de abrir una segunda sobre el mismo hilo.
+  let aiTitle = null;
   let lastUserPrompt = null, lastUserPromptTs = null;
   let lastAssistantText = null, lastAssistantTs = null;
   let lastEventKind = null; // 'tool_use' | 'tool_result' | 'assistant_text' | 'user_prompt'
@@ -102,6 +107,7 @@ function analyzeSession(file, projectFolder) {
   for (const ev of events) {
     if (ev.cwd) cwd = ev.cwd;
     if (ev.slug) slug = ev.slug;
+    if (ev.type === 'ai-title' && ev.aiTitle) aiTitle = ev.aiTitle;
     if (ev.gitBranch) gitBranch = ev.gitBranch;
     if (ev.version) version = ev.version;
     if (ev.timestamp) {
@@ -181,6 +187,7 @@ function analyzeSession(file, projectFolder) {
   return {
     id: basename(file).replace('.jsonl', ''),
     slug: slug || null,
+    aiTitle,
     projectName,
     cwd,
     model, gitBranch, version,
@@ -255,24 +262,70 @@ function comandoTerminal(cwd, id, titulo) {
   return { cmd: 'x-terminal-emulator', args: ['-e', 'sh', '-c', linea + '; exec $SHELL'] };
 }
 
-function abrirSesion(id) {
-  if (!ID_VALIDO.test(id)) return { ok: false, error: 'Identificador de sesión inválido.' };
-  const sesion = collectSessions().find(s => s.id === id);
-  if (!sesion) return { ok: false, error: 'Esa sesión ya no aparece en el disco.' };
-  if (!sesion.cwd || !fs.existsSync(sesion.cwd)) {
-    return { ok: false, error: 'La sesión no registra una carpeta de trabajo accesible.' };
-  }
+/**
+ * Intenta traer al frente la ventana que YA tiene abierta esa sesión.
+ * Devuelve 'FOCUS' | 'MULTI' | 'NONE'  (y 'NONE' ante cualquier problema:
+ * no encontrar la ventana nunca debe impedir abrir una nueva).
+ */
+function enfocarVentana(aiTitle, listo) {
+  if (process.platform !== 'win32' || !aiTitle) return listo('NONE');
+  const script = path.join(__dirname, 'enfocar.ps1');
+  if (!fs.existsSync(script)) return listo('NONE');
+  // El título va por variable de entorno, no por argumento: cero comillas que
+  // escapar y ninguna superficie de inyección.
+  const ps = spawn('powershell', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script], {
+    env: Object.assign({}, process.env, { MC_TITULO: aiTitle }),
+    windowsHide: true,
+  });
+  let salida = '';
+  ps.stdout.on('data', d => { salida += d; });
+  ps.on('error', () => listo('NONE'));
+  ps.on('close', () => {
+    const r = salida.trim().split(/\s+/).pop();
+    listo(r === 'FOCUS' || r === 'MULTI' ? r : 'NONE');
+  });
+  setTimeout(() => { try { ps.kill(); } catch (e) {} }, 6000);  // que nunca cuelgue el clic
+}
+
+function abrirVentanaNueva(sesion, id) {
   const titulo = 'Claude - ' + sesion.projectName;
-  try {
-    const { cmd, args } = comandoTerminal(sesion.cwd, id, titulo);
-    const hijo = spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: false });
-    hijo.on('error', e => console.log('No se pudo abrir la terminal: ' + e.message));
-    hijo.unref();
-    console.log('Abriendo sesión ' + id + ' en ' + sesion.cwd);
-    return { ok: true, project: sesion.projectName, cwd: sesion.cwd };
-  } catch (e) {
-    return { ok: false, error: 'No se pudo abrir la terminal: ' + String(e.message || e) };
+  const { cmd, args } = comandoTerminal(sesion.cwd, id, titulo);
+  const hijo = spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: false });
+  hijo.on('error', e => console.log('No se pudo abrir la terminal: ' + e.message));
+  hijo.unref();
+}
+
+/**
+ * Abrir = primero enfocar lo que ya existe; solo si no hay ventana, crear una.
+ * `soloEnfocar` permite al panel preguntar antes de duplicar un hilo activo.
+ */
+function abrirSesion(id, soloEnfocar, listo) {
+  if (!ID_VALIDO.test(id)) return listo({ ok: false, error: 'Identificador de sesión inválido.' });
+  const sesion = collectSessions().find(s => s.id === id);
+  if (!sesion) return listo({ ok: false, error: 'Esa sesión ya no aparece en el disco.' });
+  if (!sesion.cwd || !fs.existsSync(sesion.cwd)) {
+    return listo({ ok: false, error: 'La sesión no registra una carpeta de trabajo accesible.' });
   }
+
+  enfocarVentana(sesion.aiTitle, resultado => {
+    if (resultado !== 'NONE') {
+      console.log('Enfocando la ventana de "' + sesion.aiTitle + '"');
+      return listo({
+        ok: true, accion: 'enfocada', varias: resultado === 'MULTI',
+        project: sesion.projectName, cwd: sesion.cwd,
+      });
+    }
+    if (soloEnfocar) {
+      return listo({ ok: true, accion: 'ninguna', project: sesion.projectName });
+    }
+    try {
+      abrirVentanaNueva(sesion, id);
+      console.log('Abriendo sesión ' + id + ' en ' + sesion.cwd);
+      listo({ ok: true, accion: 'abierta', project: sesion.projectName, cwd: sesion.cwd });
+    } catch (e) {
+      listo({ ok: false, error: 'No se pudo abrir la terminal: ' + String(e.message || e) });
+    }
+  });
 }
 
 // ---------- servidor ----------
@@ -293,11 +346,17 @@ const server = http.createServer((req, res) => {
       if (cuerpo.length > 4096) req.destroy();   // no aceptamos cuerpos grandes
     });
     req.on('end', () => {
-      let out;
-      try { out = abrirSesion((JSON.parse(cuerpo) || {}).id || ''); }
-      catch (e) { out = { ok: false, error: 'Petición mal formada.' }; }
-      res.writeHead(out.ok ? 200 : 400, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify(out));
+      let datos;
+      try { datos = JSON.parse(cuerpo) || {}; }
+      catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: false, error: 'Petición mal formada.' }));
+        return;
+      }
+      abrirSesion(String(datos.id || ''), datos.soloEnfocar === true, out => {
+        res.writeHead(out.ok ? 200 : 400, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify(out));
+      });
     });
     return;
   }

@@ -1,0 +1,269 @@
+// Mission Control — Xentris Tech
+// Dashboard local que observa las sesiones de Claude Code en ~/.claude/projects
+// Sin dependencias: Node.js puro. Puerto 7777.
+
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+const PORT = 7777;
+const PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
+const TAIL_BYTES = 384 * 1024;      // cuánto leer del final de cada transcript
+const MAX_SESSIONS = 30;
+const MAX_AGE_DAYS = 7;             // sesiones más viejas no se muestran
+const WORKING_WINDOW_MS = 120 * 1000; // modificado hace <2 min = trabajando
+
+// ---------- utilidades ----------
+
+function tailFile(file, bytes) {
+  try {
+    const stat = fs.statSync(file);
+    const start = Math.max(0, stat.size - bytes);
+    const fd = fs.openSync(file, 'r');
+    const buf = Buffer.alloc(stat.size - start);
+    fs.readSync(fd, buf, 0, buf.length, start);
+    fs.closeSync(fd);
+    let text = buf.toString('utf8');
+    if (start > 0) {
+      const nl = text.indexOf('\n');
+      if (nl >= 0) text = text.slice(nl + 1); // descartar línea partida
+    }
+    return text.split('\n').filter(l => l.trim().length > 0);
+  } catch (e) {
+    return [];
+  }
+}
+
+function parseLines(lines) {
+  const out = [];
+  for (const l of lines) {
+    try { out.push(JSON.parse(l)); } catch (e) { /* línea corrupta, ignorar */ }
+  }
+  return out;
+}
+
+function basename(p) {
+  if (!p) return '';
+  return String(p).split(/[\\/]/).pop();
+}
+
+function shorten(s, n) {
+  if (!s) return '';
+  s = String(s).replace(/\s+/g, ' ').trim();
+  return s.length > n ? s.slice(0, n - 1) + '…' : s;
+}
+
+// Traduce un tool_use a una frase humana en español
+function describeTool(name, input) {
+  input = input || {};
+  if (input.description) return shorten(input.description, 90);
+  switch (name) {
+    case 'Read':       return 'Leyendo ' + basename(input.file_path);
+    case 'Edit':       return 'Editando ' + basename(input.file_path);
+    case 'Write':      return 'Escribiendo ' + basename(input.file_path);
+    case 'NotebookEdit': return 'Editando notebook ' + basename(input.notebook_path);
+    case 'Grep':       return 'Buscando "' + shorten(input.pattern, 30) + '" en el código';
+    case 'Glob':       return 'Buscando archivos ' + shorten(input.pattern, 30);
+    case 'Bash':
+    case 'PowerShell': return 'Ejecutando: ' + shorten(input.command, 70);
+    case 'Agent':      return 'Subagente: ' + shorten(input.description || input.prompt, 70);
+    case 'Workflow':   return 'Orquestando workflow de agentes';
+    case 'WebFetch':   return 'Consultando ' + shorten(input.url, 60);
+    case 'WebSearch':  return 'Buscando en la web: ' + shorten(input.query, 60);
+    case 'Skill':      return 'Usando skill ' + (input.skill || '');
+    case 'Artifact':   return 'Publicando artifact';
+    case 'SendUserFile': return 'Enviando archivo al usuario';
+    case 'AskUserQuestion': return 'Preguntándole algo al usuario';
+    case 'TaskCreate': case 'TaskUpdate': return 'Gestionando lista de tareas';
+  }
+  if (name && name.startsWith('mcp__')) {
+    const parts = name.split('__');
+    return 'Usando ' + (parts[1] || 'MCP') + ' → ' + (parts[2] || '');
+  }
+  return name || 'Trabajando';
+}
+
+// Analiza los eventos del final del transcript y arma el estado de la sesión
+function analyzeSession(file, projectFolder) {
+  const stat = fs.statSync(file);
+  const events = parseLines(tailFile(file, TAIL_BYTES));
+  if (events.length === 0) return null;
+
+  let cwd = null, slug = null, model = null, gitBranch = null, version = null;
+  let lastUserPrompt = null, lastUserPromptTs = null;
+  let lastAssistantText = null, lastAssistantTs = null;
+  let lastEventKind = null; // 'tool_use' | 'tool_result' | 'assistant_text' | 'user_prompt'
+  let firstTs = null, lastTs = null;
+  let toolCount = 0, subagentActivity = 0;
+  const timeline = []; // últimas acciones humanizadas
+
+  for (const ev of events) {
+    if (ev.cwd) cwd = ev.cwd;
+    if (ev.slug) slug = ev.slug;
+    if (ev.gitBranch) gitBranch = ev.gitBranch;
+    if (ev.version) version = ev.version;
+    if (ev.timestamp) {
+      if (!firstTs) firstTs = ev.timestamp;
+      lastTs = ev.timestamp;
+    }
+    if (ev.isSidechain) { subagentActivity++; }
+
+    const msg = ev.message;
+    if (!msg || ev.isSidechain) continue;
+
+    if (msg.model) model = msg.model;
+
+    if (ev.type === 'user' && msg.role === 'user') {
+      const content = msg.content;
+      if (typeof content === 'string') {
+        if (!content.startsWith('<') && content.trim()) {
+          lastUserPrompt = shorten(content, 140);
+          lastUserPromptTs = ev.timestamp;
+          lastEventKind = 'user_prompt';
+        }
+      } else if (Array.isArray(content)) {
+        for (const c of content) {
+          if (c.type === 'text' && c.text && !c.text.startsWith('<')) {
+            lastUserPrompt = shorten(c.text, 140);
+            lastUserPromptTs = ev.timestamp;
+            lastEventKind = 'user_prompt';
+          }
+          if (c.type === 'tool_result') lastEventKind = 'tool_result';
+        }
+      }
+    }
+
+    if (ev.type === 'assistant' && msg.role === 'assistant' && Array.isArray(msg.content)) {
+      for (const c of msg.content) {
+        if (c.type === 'tool_use') {
+          toolCount++;
+          lastEventKind = 'tool_use';
+          timeline.push({ ts: ev.timestamp, text: describeTool(c.name, c.input), tool: c.name });
+          if (timeline.length > 12) timeline.shift();
+        }
+        if (c.type === 'text' && c.text && c.text.trim()) {
+          lastAssistantText = shorten(c.text, 200);
+          lastAssistantTs = ev.timestamp;
+          lastEventKind = 'assistant_text';
+        }
+      }
+    }
+  }
+
+  const now = Date.now();
+  const idleMs = now - stat.mtimeMs;
+
+  // Estado
+  let status, statusLabel;
+  if (idleMs < WORKING_WINDOW_MS) {
+    if (lastEventKind === 'assistant_text') { status = 'waiting'; statusLabel = 'Esperándote'; }
+    else { status = 'working'; statusLabel = 'Trabajando'; }
+  } else if (idleMs < 30 * 60 * 1000) {
+    if (lastEventKind === 'tool_use') { status = 'paused'; statusLabel = 'Pausada (¿permiso pendiente?)'; }
+    else { status = 'waiting'; statusLabel = 'Esperándote'; }
+  } else {
+    status = 'idle'; statusLabel = 'Inactiva';
+  }
+
+  // Nombre de proyecto legible
+  let projectName = cwd ? basename(cwd) || cwd : projectFolder;
+  if (projectName.toLowerCase() === 'user') projectName = 'Carpeta personal (~)';
+
+  // "Ahora": la mejor frase de qué está pasando
+  let nowDoing;
+  if (status === 'working' && timeline.length) nowDoing = timeline[timeline.length - 1].text;
+  else if (lastAssistantText) nowDoing = lastAssistantText;
+  else if (timeline.length) nowDoing = timeline[timeline.length - 1].text;
+  else nowDoing = 'Sesión iniciada';
+
+  return {
+    id: basename(file).replace('.jsonl', ''),
+    slug: slug || null,
+    projectName,
+    cwd,
+    model, gitBranch, version,
+    status, statusLabel,
+    lastModified: stat.mtimeMs,
+    idleSeconds: Math.round(idleMs / 1000),
+    lastUserPrompt, lastAssistantText,
+    nowDoing,
+    toolCount,
+    subagents: subagentActivity > 0,
+    timeline: timeline.slice(-6).reverse(),
+    sizeKB: Math.round(stat.size / 1024),
+  };
+}
+
+function collectSessions() {
+  const results = [];
+  const cutoff = Date.now() - MAX_AGE_DAYS * 24 * 3600 * 1000;
+  let folders = [];
+  try { folders = fs.readdirSync(PROJECTS_DIR); } catch (e) { return results; }
+
+  for (const folder of folders) {
+    const dir = path.join(PROJECTS_DIR, folder);
+    let files = [];
+    try { files = fs.readdirSync(dir).filter(f => f.endsWith('.jsonl')); } catch (e) { continue; }
+    for (const f of files) {
+      const full = path.join(dir, f);
+      try {
+        const st = fs.statSync(full);
+        if (st.mtimeMs < cutoff || st.size < 2000) continue;
+        results.push({ full, folder, mtime: st.mtimeMs });
+      } catch (e) { /* ignorar */ }
+    }
+  }
+  results.sort((a, b) => b.mtime - a.mtime);
+  const sessions = [];
+  for (const r of results.slice(0, MAX_SESSIONS)) {
+    const s = analyzeSession(r.full, r.folder);
+    if (s) sessions.push(s);
+  }
+  return sessions;
+}
+
+// ---------- servidor ----------
+
+const server = http.createServer((req, res) => {
+  if (req.url.startsWith('/api/sessions')) {
+    let payload;
+    try {
+      payload = JSON.stringify({ ok: true, generatedAt: Date.now(), sessions: collectSessions() });
+    } catch (e) {
+      payload = JSON.stringify({ ok: false, error: String(e) });
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(payload);
+    return;
+  }
+  // logo de marca
+  if (req.url === '/logo.png') {
+    fs.readFile(path.join(__dirname, 'logo.png'), (err, data) => {
+      if (err) { res.writeHead(404); res.end('no logo'); return; }
+      res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'max-age=3600' });
+      res.end(data);
+    });
+    return;
+  }
+  // dashboard
+  const htmlPath = path.join(__dirname, 'index.html');
+  fs.readFile(htmlPath, (err, data) => {
+    if (err) { res.writeHead(500); res.end('No se encontró index.html'); return; }
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(data);
+  });
+});
+
+server.on('error', (e) => {
+  if (e.code === 'EADDRINUSE') {
+    console.log('Mission Control ya está corriendo en http://localhost:' + PORT);
+    process.exit(0);
+  }
+  throw e;
+});
+
+server.listen(PORT, '127.0.0.1', () => {
+  console.log('🚀 Mission Control — http://localhost:' + PORT);
+  console.log('Observando: ' + PROJECTS_DIR);
+});

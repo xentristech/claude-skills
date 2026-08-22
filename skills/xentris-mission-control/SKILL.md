@@ -1,6 +1,6 @@
 ---
 name: xentris-mission-control
-description: Buena práctica de agente Xentris Tech. Instala "Mission Control", un panel local (Node sin dependencias, puerto 7777, solo 127.0.0.1) que lee los transcripts de Claude Code en ~/.claude/projects y muestra en tiempo real qué hace cada sesión: semáforo de estado, qué hace ahora en lenguaje humano, y modo presentación para clientes. Cada tarjeta abre su sesión en una ventana nueva. Aplica el manual de marca Xentris (Mansfield/Cropar incrustadas, sin CDN). Úsala cuando pidan "mission control", "panel/dashboard de agentes", "ver qué hacen mis agentes", "observabilidad de agentes", "monitor de sesiones de Claude", o al montarlo en otro PC.
+description: Buena práctica de agente Xentris Tech. Instala "Mission Control", un panel local (Node sin dependencias, puerto 7777, solo 127.0.0.1) que lee los transcripts de Claude Code en ~/.claude/projects y muestra en tiempo real qué hace cada sesión: semáforo de estado, qué hace ahora en lenguaje humano, y modo presentación para clientes. Un clic en la tarjeta trae al frente la ventana que esa sesión ya tiene abierta. Aplica el manual de marca Xentris (Mansfield/Cropar incrustadas, sin CDN). Úsala cuando pidan "mission control", "panel/dashboard de agentes", "ver qué hacen mis agentes", "observabilidad de agentes", "monitor de sesiones de Claude", o al montarlo en otro PC.
 ---
 
 # Mission Control — panel de observabilidad de agentes (Xentris Tech)

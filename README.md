@@ -2,12 +2,12 @@
 
 # 🧩 Claude Skills — Xentris Tech
 
-### Agent Skills para [Claude Code](https://claude.com/claude-code) que automatizan SEO, despliegues y continuidad de trabajo
+### Agent Skills para [Claude Code](https://claude.com/claude-code) que automatizan SEO, despliegues, observabilidad de agentes y continuidad de trabajo
 
 <br/>
 
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Agent_Skills-D97757?style=for-the-badge&logo=anthropic&logoColor=white)
-![Skills](https://img.shields.io/badge/Skills-8-2E7D32?style=for-the-badge)
+![Skills](https://img.shields.io/badge/Skills-10-2E7D32?style=for-the-badge)
 ![Made by](https://img.shields.io/badge/Made_by-Xentris_Tech-1A1A1A?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
@@ -63,11 +63,18 @@ Estos son los skills que uso día a día en **Xentris Tech**: van desde posicion
 | **[`xentris-memoria-proyecto`](skills/xentris-memoria-proyecto)** | Crea y mantiene una **"memoria del proyecto"** (notas de continuidad) para que Claude retome el contexto exacto — qué se hizo, cómo va y cuál es el próximo paso — si se cierra la sesión. |
 | **[`xentris-acceso-rapido`](skills/xentris-acceso-rapido)** | Crea un **acceso en el escritorio de Windows** (`.bat` + `.lnk` con ícono de marca) que reabre Claude Code en el proyecto y **continúa la conversación** donde quedó. |
 
+### 🛰️ Observabilidad de agentes
+
+| Skill | Qué hace |
+|-------|----------|
+| **[`xentris-mission-control`](skills/xentris-mission-control)** | Instala **Mission Control**, el *"Windows" de los agentes de IA*: un panel local (Node sin dependencias, `127.0.0.1:7777`) que lee los transcripts de Claude Code y muestra **en tiempo real y en lenguaje humano** qué hace cada sesión — semáforo de estado, resumen del proyecto al pasar el mouse, artefactos publicados y **modo presentación** para clientes. Un clic en la tarjeta **trae al frente la ventana** que esa sesión ya tiene abierta, en vez de abrir otra. Sale on-brand: tipografía propia incrustada, cero CDN. |
+
 ### 📄 Documentos y marca personal
 
 | Skill | Qué hace |
 |-------|----------|
 | **[`xentris-hoja-de-vida`](skills/xentris-hoja-de-vida)** | Crea una **hoja de vida (CV / resume)** profesional en **HTML imprimible a PDF** (A4, dos columnas) con un **asistente de IA integrado** que invita al reclutador a *preguntar y evaluar* al candidato — chat offline por palabras clave que **se oculta al imprimir**. Recopila datos del portafolio, LinkedIn, GitHub y proyectos. Español e inglés. |
+| **[`xentris-perfil-github`](skills/xentris-perfil-github)** | Crea o rehace el **README de perfil de GitHub** (el repo especial `usuario/usuario`) con banner SVG propio, secciones colapsables, un asistente de IA que responde preguntas por Issues y estructura pensada para que ChatGPT y Perplexity **citen** el perfil. Incluye las trampas verificadas que rompen la mayoría de perfiles. |
 
 ---
 
@@ -107,6 +114,8 @@ Una vez instalados, **no tienes que hacer nada especial**: Claude activa el skil
 > *"Guarda dónde vamos para no perder el hilo"* → activa `xentris-memoria-proyecto`
 > *"Hazme una hoja de vida con IA"* → activa `xentris-hoja-de-vida`
 > *"Quiero conectarme a este PC desde otro lado por Tailscale"* → activa `xentris-acceso-remoto-tailscale`
+> *"Quiero ver qué están haciendo mis agentes"* → activa `xentris-mission-control`
+> *"Haz que mi perfil de GitHub se vea profesional"* → activa `xentris-perfil-github`
 
 También puedes invocarlos por su nombre con `/`.
 
@@ -134,7 +143,11 @@ claude-skills/
     │   ├── SKILL.md
     │   └── assets/             # plantilla-cv.html (diseño A4 + chat de IA)
     ├── xentris-hostinger-a-vercel/
-    └── xentris-memoria-proyecto/
+    ├── xentris-memoria-proyecto/
+    ├── xentris-mission-control/
+    │   ├── SKILL.md
+    │   └── reference/          # server.js, index.html, aplicar-marca.js, enfocar.ps1
+    └── xentris-perfil-github/
 ```
 
 ---

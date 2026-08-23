@@ -1,6 +1,6 @@
 ---
 name: xentris-mission-control
-description: Buena práctica de agente Xentris Tech. Instala "Mission Control", un panel local (Node sin dependencias, puerto 7777, solo 127.0.0.1) que lee los transcripts de Claude Code en ~/.claude/projects y muestra en tiempo real qué hace cada sesión: semáforo de estado, qué hace ahora en lenguaje humano, y modo presentación para clientes. Un clic en la tarjeta trae al frente la ventana que esa sesión ya tiene abierta. Aplica el manual de marca Xentris (Mansfield/Cropar incrustadas, sin CDN). Úsala cuando pidan "mission control", "panel/dashboard de agentes", "ver qué hacen mis agentes", "observabilidad de agentes", "monitor de sesiones de Claude", o al montarlo en otro PC.
+description: Buena práctica de agente Xentris Tech. Instala "Mission Control", un panel local (Node sin dependencias, puerto 7777, solo 127.0.0.1) que lee los transcripts de Claude Code en ~/.claude/projects y muestra en tiempo real qué hace cada sesión: semáforo de estado, qué hace ahora en lenguaje humano, y modo presentación para clientes. Un clic en la tarjeta trae al frente la ventana que esa sesión ya tiene abierta. Aplica el manual de marca Xentris (Mansfield/Cropar incrustadas, sin CDN) y opcionalmente se empaqueta como aplicacion de escritorio con Electron. Úsala cuando pidan "mission control", "panel/dashboard de agentes", "ver qué hacen mis agentes", "observabilidad de agentes", "monitor de sesiones de Claude", o al montarlo en otro PC.
 ---
 
 # Mission Control — panel de observabilidad de agentes (Xentris Tech)
@@ -19,6 +19,7 @@ Por cada sesión muestra una tarjeta encabezada por el **nombre de la conversaci
   ⚠️ **Viene con Montserrat por CDN, que NO es la tipografia de Xentris.** No lo instales tal cual: pasalo siempre por `aplicar-marca.js` (paso 1.5).
 - `logo.png` — wordmark oficial de Xentris (opcional; si el proyecto tiene su propia marca, reemplázalo).
 - `enfocar.ps1` — trae al frente la ventana que una sesión ya tiene abierta (solo Windows). Si falta, el panel simplemente abre una ventana nueva cada vez.
+- `main.js` + `package.json` — **opcional**: envuelven el panel en una **aplicación de Windows** (Electron) con ventana propia, bandeja y servidor incrustado. Ver la sección *Aplicación de escritorio*.
 - `aplicar-marca.js` — **obligatorio**: transforma `index.html` para cumplir el manual (quita el CDN de Google Fonts, incrusta Mansfield + Cropar en base64, corrige los tonos derivados, pone los títulos en itálica black y añade la barra degradada).
 
 ## Parámetros a definir antes de instalar
@@ -72,8 +73,10 @@ Requiere **Node.js** (cualquier versión moderna; verifícalo con `node --versio
 ```powershell
 Start-Process node -ArgumentList "$mc\server.js" -WindowStyle Hidden
 Start-Sleep -Seconds 2
-# Verificar: deben responder 200
-(Invoke-WebRequest 'http://127.0.0.1:7777/api/sessions' -UseBasicParsing).StatusCode
+# Verificar: 200 Y ADEMAS JSON. Ojo: server.js responde index.html a cualquier ruta
+# que no reconozca, asi que un 200 por si solo no prueba que la API este viva.
+$r = Invoke-WebRequest 'http://127.0.0.1:7777/api/sessions' -UseBasicParsing
+"$($r.StatusCode) $($r.Headers['Content-Type'])"   # -> 200 application/json; charset=utf-8
 Start-Process 'http://localhost:7777'
 ```
 
@@ -109,6 +112,7 @@ En macOS/Linux, en vez del `.lnk`, deja un alias o un `mission-control.sh` con `
 ### 4. Confirmar al usuario
 - Doble clic en **"Mission Control"** (el `.lnk`) abre el panel; si el servidor ya corre, solo abre la pestaña.
 - Recuérdale el **modo presentación** (botón arriba a la derecha) para mostrarle el trabajo a un cliente.
+- Si prefiere una **aplicación de Windows** en vez del navegador, ofrécele empaquetarla: ver *Aplicación de escritorio* más abajo.
 
 ## Clic en una tarjeta → abre esa sesión
 
@@ -182,6 +186,78 @@ comentarios). Se muestran los tres últimos.
 
 Un clic en un chip abre el artefacto, **no** la sesión: el manejador de la tarjeta ignora los
 clics que caen sobre un enlace.
+
+---
+
+## Aplicación de escritorio (opcional, Windows)
+
+El panel se puede envolver en una **aplicación de Windows** para que no dependa del
+navegador: ventana propia sin barra de direcciones, ícono en la bandeja del reloj,
+arranque con el sistema y **el servidor adentro** — no hay que abrir el `.bat`.
+
+Dos archivos de `reference/` lo hacen:
+
+- `main.js` — proceso principal de Electron: ventana, bandeja, enlaces externos y arranque
+  del servidor.
+- `package.json` — dependencias y la configuración de empaquetado (electron-builder).
+
+**No duplica nada.** `main.js` hace `require('./server.js')`: es el mismo servidor, en el
+mismo proceso. Por eso los dos archivos van **dentro de la carpeta del panel**, junto a
+`server.js`, `index.html`, `logo.png` y `enfocar.ps1`, no en una carpeta aparte.
+
+```powershell
+$mc = "$env:USERPROFILE\mission-control"
+Copy-Item "<ruta-al-skill>\reference\main.js"      "$mc\main.js"      -Force
+Copy-Item "<ruta-al-skill>\reference\package.json" "$mc\package.json" -Force
+cd $mc
+npm install --save-dev electron@latest electron-builder@latest
+node node_modules\electron\install.js    # ver trampa 1
+npm run dist                              # -> dist\Mission Control Setup 1.0.0.exe
+```
+
+El instalador crea el acceso en el escritorio y en el menú inicio, con el ícono de marca.
+Se instala **por usuario**, sin pedir administrador.
+
+### Cómo se comporta
+
+- **La X no cierra la app**, la esconde en la bandeja: es un monitor, está para quedarse.
+  La primera vez avisa con un globo. Para cerrarla de verdad: clic derecho en la bandeja →
+  *Salir*.
+- **Una sola instancia.** Volver a abrir el ícono trae al frente la ventana que ya está.
+- **Si ya hay un servidor corriendo** (el `.bat` de siempre), la app se conecta a ese en vez
+  de levantar otro. Si el puerto lo tiene un programa ajeno, lo dice en pantalla en vez de
+  fingir que todo va bien.
+- **Los chips de artefacto abren el navegador de verdad.** Dentro de la app dejarían al
+  usuario navegando fuera del panel y sin barra para volver.
+- `F5` recarga y `Ctrl+Shift+I` abre las herramientas de desarrollo. No hay menú.
+
+### Cuatro trampas ya resueltas
+
+1. **npm bloquea el script que baja Electron.** `npm install` termina con código 0 y deja
+   `node_modules/electron` **sin el binario**: al arrancar da "Electron failed to install
+   correctly". Es la política `allow-scripts` de npm. Solución: `node
+   node_modules\electron\install.js` a mano, o aprobar los scripts.
+2. **`asar` tiene que ir en `false`.** El panel enfoca ventanas lanzando
+   `powershell -File enfocar.ps1`, y PowerShell **no puede leer dentro de `app.asar`**.
+   Empaquetado en asar, el clic en la tarjeta abriría siempre una ventana nueva.
+3. **La sonda del puerto tiene que pegarle a `/api/sessions`.** `server.js` responde
+   `index.html` a cualquier ruta que no reconozca, así que una ruta inventada siempre da
+   200 y no prueba nada. Hay que exigir además que el `Content-Type` sea JSON.
+4. **El `.ico` necesita un tamaño de 256×256** o electron-builder falla. El
+   `marca-icon.ico` que genera el paso 1 ya los trae todos (16 a 256).
+
+### Si no quieres compilar nada
+
+Alternativa en un minuto, sin instalar Electron: un acceso directo a Chrome en modo app.
+
+```
+chrome.exe --app=http://127.0.0.1:7777 --window-size=1500,1000
+```
+
+Da ventana propia sin barra de direcciones, pero necesita Chrome instalado y que el
+servidor lo levante el `.bat`.
+
+---
 
 ## Cómo ajustar (parámetros dentro de `server.js`)
 Al inicio del archivo hay constantes fáciles de tocar:

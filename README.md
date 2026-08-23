@@ -67,7 +67,7 @@ Estos son los skills que uso día a día en **Xentris Tech**: van desde posicion
 
 | Skill | Qué hace |
 |-------|----------|
-| **[`xentris-mission-control`](skills/xentris-mission-control)** | Instala **Mission Control**, el *"Windows" de los agentes de IA*: un panel local (Node sin dependencias, `127.0.0.1:7777`) que lee los transcripts de Claude Code y muestra **en tiempo real y en lenguaje humano** qué hace cada sesión — semáforo de estado, resumen del proyecto al pasar el mouse, artefactos publicados y **modo presentación** para clientes. Un clic en la tarjeta **trae al frente la ventana** que esa sesión ya tiene abierta, en vez de abrir otra. Sale on-brand: tipografía propia incrustada, cero CDN. |
+| **[`xentris-mission-control`](skills/xentris-mission-control)** | Instala **Mission Control**, el *"Windows" de los agentes de IA*: un panel local (Node sin dependencias, `127.0.0.1:7777`) que lee los transcripts de Claude Code y muestra **en tiempo real y en lenguaje humano** qué hace cada sesión — semáforo de estado, resumen del proyecto al pasar el mouse, artefactos publicados y **modo presentación** para clientes. Un clic en la tarjeta **trae al frente la ventana** que esa sesión ya tiene abierta, en vez de abrir otra. Se puede empaquetar como **aplicación de Windows** (Electron): ventana propia, ícono en la bandeja y arranque con el sistema, sin navegador. Sale on-brand: tipografía propia incrustada, cero CDN. |
 
 ### 📄 Documentos y marca personal
 

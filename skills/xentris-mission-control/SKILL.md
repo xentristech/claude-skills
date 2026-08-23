@@ -21,6 +21,7 @@ Por cada sesión muestra una tarjeta encabezada por el **nombre de la conversaci
 - `estado-ventanas.ps1` — lee el glifo de estado del título de cada ventana: es la **única señal en vivo** de qué sesión está trabajando (el `.jsonl` no se escribe durante el turno). Ver *El semáforo*.
 - `enfocar.ps1` — trae al frente la ventana que una sesión ya tiene abierta (solo Windows). Si falta, el panel simplemente abre una ventana nueva cada vez.
 - `marca-icon.ico` — ícono de marca para la ventana, la bandeja y el instalador. electron-builder exige un tamaño 256×256; este los trae todos (16 a 256).
+- `verificar.ps1` — comprueba en un vistazo si ese equipo quedó bien: skill, frontmatter, marca, servidor y aplicación. No cambia nada.
 - `actualizar.ps1` — **el camino rápido**: instala o **actualiza** una instalación existente, y con `-DesdeGitHub` se trae primero lo último del repo. Ver la sección de abajo.
 - `main.js` + `package.json` — **opcional**: envuelven el panel en una **aplicación de Windows** (Electron) con ventana propia, bandeja y servidor incrustado. Ver la sección *Aplicación de escritorio*.
 - `aplicar-marca.js` — **obligatorio**: transforma `index.html` para cumplir el manual (quita el CDN de Google Fonts, incrusta Mansfield + Cropar en base64, corrige los tonos derivados, pone los títulos en itálica black y añade la barra degradada).
@@ -60,6 +61,30 @@ Lo que hace, y lo que a mano se olvida:
   bandera el panel queda al día pero el `.exe` sigue con la versión anterior, y el script
   te lo dice.
 - Termina verificando **200 + `application/json`**, no solo el código 200.
+
+## Verificar que quedó bien (en cualquier equipo)
+
+```powershell
+& "$env:USERPROFILE\.claude\skills\xentris-mission-control\reference\verificar.ps1"
+```
+
+No cambia nada: mira y da veredicto. Comprueba cinco cosas, en orden de *"sin esto no sirve"*:
+
+1. **El skill trae los cinco archivos nuevos** (`actualizar.ps1`, `estado-ventanas.ps1`,
+   `main.js`, `package.json`, `marca-icon.ico`). Si falta alguno, ese equipo sigue en la
+   versión vieja.
+2. **El `SKILL.md` se puede parsear** — sin CRLF, sin BOM, `---` en la primera línea y la
+   descripción por debajo del límite. Es la comprobación que más vale: cuando esto falla, la
+   skill no da error, simplemente **se queda muda** y deja de dispararse sola.
+3. **El panel está on-brand**: 4 `@font-face` incrustadas, cero enlaces a Google Fonts, cero
+   Montserrat en uso.
+4. **El servidor responde 200 *y* `application/json`**, y cuántas sesiones ve.
+5. **La aplicación de Windows** está instalada, figura con desinstalador, y el `.exe` **lleva
+   dentro** `estado-ventanas.ps1` — si no, es un `.exe` anterior al semáforo en vivo y hay que
+   rehacerlo con `-App`.
+
+Termina con `TODO EN ORDEN` o con la cuenta de problemas, y sale con código 1 si hay alguno,
+para poder encadenarlo.
 
 ## Parámetros a definir antes de instalar
 1. **MC_DIR**: carpeta donde vivirá el panel. Por defecto `~/mission-control` (en Windows `C:\Users\<usuario>\mission-control`).

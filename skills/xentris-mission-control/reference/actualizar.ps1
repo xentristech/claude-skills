@@ -14,6 +14,9 @@
 #   2. Hay que parar la app o el servidor antes de sobrescribir: si no, Windows
 #      bloquea los archivos y la copia falla a medias.
 #   3. logo.png puede estar personalizado en ese equipo. Solo se copia si falta.
+#   4. git en Windows entrega los archivos con CRLF, y el cargador de skills NO
+#      parsea el frontmatter asi: el skill se queda mudo, sin descripcion, y
+#      deja de dispararse solo. Todo lo que es texto se copia normalizado a LF.
 #
 # Uso:
 #   .\actualizar.ps1                       # actualiza desde el skill instalado
@@ -31,6 +34,31 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+$EXT_TEXTO = @('.md', '.js', '.ps1', '.json', '.html')
+
+# Copia dejando el archivo en LF y sin BOM. Las dos cosas rompen el frontmatter.
+function CopiarTexto($origen, $destino) {
+  $s = [System.IO.File]::ReadAllText($origen, [System.Text.Encoding]::UTF8)
+  $s = $s -replace "`r`n", "`n"
+  $s = $s.TrimStart([char]0xFEFF)
+  [System.IO.File]::WriteAllText($destino, $s, (New-Object System.Text.UTF8Encoding($false)))
+}
+
+function NormalizarCarpeta($carpeta) {
+  $n = 0
+  Get-ChildItem $carpeta -Recurse -File |
+    Where-Object { $EXT_TEXTO -contains $_.Extension.ToLower() } |
+    ForEach-Object {
+      $crudo = [System.IO.File]::ReadAllText($_.FullName, [System.Text.Encoding]::UTF8)
+      if ($crudo.Contains("`r`n") -or $crudo.StartsWith([char]0xFEFF)) {
+        CopiarTexto $_.FullName $_.FullName
+        $n++
+      }
+    }
+  return $n
+}
+
 function Titulo($t) { ""; "=" * 64; $t; "=" * 64 }
 function Ok($m)     { "  [ok]    $m" }
 function Aviso($m)  { "  [aviso] $m" }
@@ -67,6 +95,14 @@ if ($DesdeGitHub) {
 
 $ref = Join-Path $Skill 'reference'
 if (-not (Test-Path $ref)) { Falla "no encuentro $ref"; exit 1 }
+
+# Repara el skill si vino de un clon con CRLF: asi el frontmatter vuelve a
+# parsearse y la skill se anuncia con su descripcion en vez de solo el titulo.
+$normalizados = NormalizarCarpeta $Skill
+if ($normalizados -gt 0) {
+  Aviso "$normalizados archivos del skill venian con CRLF: pasados a LF"
+  Aviso "sin esto el skill se queda sin descripcion y deja de dispararse solo"
+}
 
 # ------------------------------------------------------------- inventario ----
 $nuevaInstalacion = -not (Test-Path (Join-Path $Destino 'server.js'))
@@ -115,9 +151,9 @@ Ok $(if ($appViva) { "app cerrada (se vuelve a abrir al final)" } else { "nada c
 Titulo "4. Copiando archivos"
 foreach ($f in $copiar) {
   $origen = Join-Path $ref $f
-  if (Test-Path $origen) { Copy-Item $origen (Join-Path $Destino $f) -Force; Ok $f }
+  if (Test-Path $origen) { CopiarTexto $origen (Join-Path $Destino $f); Ok $f }
 }
-Copy-Item (Join-Path $ref 'index.html') (Join-Path $Destino 'index.html.orig') -Force
+CopiarTexto (Join-Path $ref 'index.html') (Join-Path $Destino 'index.html.orig')
 Ok "index.html -> index.html.orig (base para la marca)"
 
 $logo = Join-Path $Destino 'logo.png'

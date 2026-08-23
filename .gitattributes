@@ -1,0 +1,12 @@
+# Los skills se leen con un parser de frontmatter que NO tolera CRLF: si git
+# entrega SKILL.md con finales de linea de Windows, la skill se queda sin
+# descripcion y deja de dispararse sola. Por eso todo el texto se guarda y se
+# entrega en LF, en cualquier sistema.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
+*.ttf binary
+*.otf binary
+*.jpg binary
+*.pdf binary

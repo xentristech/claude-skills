@@ -7,7 +7,7 @@
 <br/>
 
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Agent_Skills-D97757?style=for-the-badge&logo=anthropic&logoColor=white)
-![Skills](https://img.shields.io/badge/Skills-10-2E7D32?style=for-the-badge)
+![Skills](https://img.shields.io/badge/Skills-11-2E7D32?style=for-the-badge)
 ![Made by](https://img.shields.io/badge/Made_by-Xentris_Tech-1A1A1A?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
@@ -63,6 +63,12 @@ Estos son los skills que uso día a día en **Xentris Tech**: van desde posicion
 | **[`xentris-memoria-proyecto`](skills/xentris-memoria-proyecto)** | Crea y mantiene una **"memoria del proyecto"** (notas de continuidad) para que Claude retome el contexto exacto — qué se hizo, cómo va y cuál es el próximo paso — si se cierra la sesión. |
 | **[`xentris-acceso-rapido`](skills/xentris-acceso-rapido)** | Crea un **acceso en el escritorio de Windows** (`.bat` + `.lnk` con ícono de marca) que reabre Claude Code en el proyecto y **continúa la conversación** donde quedó. |
 
+### 🧭 Método de trabajo
+
+| Skill | Qué hace |
+|-------|----------|
+| **[`xentris-herramienta-interna`](skills/xentris-herramienta-interna)** | El **método** para convertir una idea en una herramienta interna terminada y reproducible en otro equipo: buscar el dato que **ya existe**, servidor local en `127.0.0.1` sin dependencias, marca aplicada por un script que **falla** si algo quedó fuera, verificar mirando, y cerrar publicándola como skill. Con el molde de seguridad y las trampas que costaron horas. Caso de referencia: Mission Control. |
+
 ### 🛰️ Observabilidad de agentes
 
 | Skill | Qué hace |
@@ -116,6 +122,7 @@ Una vez instalados, **no tienes que hacer nada especial**: Claude activa el skil
 > *"Quiero conectarme a este PC desde otro lado por Tailscale"* → activa `xentris-acceso-remoto-tailscale`
 > *"Quiero ver qué están haciendo mis agentes"* → activa `xentris-mission-control`
 > *"Haz que mi perfil de GitHub se vea profesional"* → activa `xentris-perfil-github`
+> *"Quiero una herramienta que me muestre…"* → activa `xentris-herramienta-interna`
 
 También puedes invocarlos por su nombre con `/`.
 
@@ -142,6 +149,7 @@ claude-skills/
     ├── xentris-hoja-de-vida/
     │   ├── SKILL.md
     │   └── assets/             # plantilla-cv.html (diseño A4 + chat de IA)
+    ├── xentris-herramienta-interna/
     ├── xentris-hostinger-a-vercel/
     ├── xentris-memoria-proyecto/
     ├── xentris-mission-control/

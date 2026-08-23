@@ -18,6 +18,7 @@ Por cada sesión muestra una tarjeta encabezada por el **nombre de la conversaci
 - `index.html` — dashboard base, accesible y responsive; el logo tiene fallback a texto si falta el PNG.
   ⚠️ **Viene con Montserrat por CDN, que NO es la tipografia de Xentris.** No lo instales tal cual: pasalo siempre por `aplicar-marca.js` (paso 1.5).
 - `logo.png` — wordmark oficial de Xentris (opcional; si el proyecto tiene su propia marca, reemplázalo).
+- `estado-ventanas.ps1` — lee el glifo de estado del título de cada ventana: es la **única señal en vivo** de qué sesión está trabajando (el `.jsonl` no se escribe durante el turno). Ver *El semáforo*.
 - `enfocar.ps1` — trae al frente la ventana que una sesión ya tiene abierta (solo Windows). Si falta, el panel simplemente abre una ventana nueva cada vez.
 - `main.js` + `package.json` — **opcional**: envuelven el panel en una **aplicación de Windows** (Electron) con ventana propia, bandeja y servidor incrustado. Ver la sección *Aplicación de escritorio*.
 - `aplicar-marca.js` — **obligatorio**: transforma `index.html` para cumplir el manual (quita el CDN de Google Fonts, incrusta Mansfield + Cropar en base64, corrige los tonos derivados, pone los títulos en itálica black y añade la barra degradada).
@@ -113,6 +114,43 @@ En macOS/Linux, en vez del `.lnk`, deja un alias o un `mission-control.sh` con `
 - Doble clic en **"Mission Control"** (el `.lnk`) abre el panel; si el servidor ya corre, solo abre la pestaña.
 - Recuérdale el **modo presentación** (botón arriba a la derecha) para mostrarle el trabajo a un cliente.
 - Si prefiere una **aplicación de Windows** en vez del navegador, ofrécele empaquetarla: ver *Aplicación de escritorio* más abajo.
+
+## El semáforo: por qué el archivo no basta
+
+**Medido el 2026-08-23: el transcript `.jsonl` no se escribe mientras un turno está en
+marcha.** Su `mtime` se queda congelado hasta que el turno termina o entra un mensaje del
+usuario — se comprobó con 27 minutos de trabajo continuo sin que el archivo cambiara, y
+barriendo `~/.claude` entero sin encontrar ningún otro archivo tocado en 10 minutos.
+
+Consecuencia: un semáforo calculado solo con `mtime` marca **"Esperándote" o "Inactiva"
+justo a las sesiones que están trabajando**. El panel llegó a mostrar *0 trabajando* con
+siete terminales abiertas.
+
+La señal que sí va en vivo es el **título de la ventana**: Claude Code le antepone un glifo
+de estado.
+
+| Glifo | Significado |
+|---|---|
+| `✳` (U+2733) | la sesión está quieta |
+| `◐` (U+25D0) | trabajando |
+
+`estado-ventanas.ps1` enumera las ventanas visibles y devuelve `{glifo, título}`. `server.js`
+lo llama **en segundo plano** cada 3 s y la respuesta usa la última foto: nunca espera a
+PowerShell. Cada sesión trae un campo `fuenteEstado` — `ventana` (en vivo) o `archivo` (no
+hay ventana abierta y se cae al `mtime`).
+
+Tres decisiones que conviene no deshacer:
+
+- **Cualquier glifo distinto de `✳` cuenta como trabajando.** Si Claude añade cuadros de
+  animación, la detección sigue en pie; al revés, se apagaría en silencio.
+- **La salida del script es JSON escapado a ASCII (`\uXXXX`).** Lo que PowerShell entrega a
+  otro proceso cruza el codepage de la consola, y ahí los glifos y los acentos se corrompen
+  sin avisar.
+- **Si falta el script, se degrada al `mtime`**, no se rompe. En macOS/Linux no hay
+  equivalente todavía: allí el semáforo sigue siendo el del archivo.
+
+**"Qué hace ahora" va con retraso, y es inevitable:** esa frase sale del transcript, que no
+se escribe hasta que el turno cierra. El semáforo es en vivo; la frase, no.
 
 ## Clic en una tarjeta → abre esa sesión
 

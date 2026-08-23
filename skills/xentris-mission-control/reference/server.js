@@ -14,6 +14,8 @@ const TAIL_BYTES = 384 * 1024;      // cuánto leer del final de cada transcript
 const MAX_SESSIONS = 30;
 const MAX_AGE_DAYS = 7;             // sesiones más viejas no se muestran
 const WORKING_WINDOW_MS = 120 * 1000; // modificado hace <2 min = trabajando
+const GLIFO_QUIETA = '✳';        // el que Claude pone cuando NO esta trabajando
+const VENTANAS_TTL_MS = 3000;         // cada cuanto se vuelve a mirar la barra de titulos
 
 // ---------- utilidades ----------
 
@@ -259,6 +261,16 @@ function analyzeSession(file, projectFolder) {
     status = 'idle'; statusLabel = 'Inactiva';
   }
 
+  // La barra de titulos manda sobre el archivo: es la unica senal en vivo.
+  let fuenteEstado = 'archivo';
+  const porVentana = estadoPorVentana(aiTitle);
+  if (porVentana === 'trabajando') {
+    status = 'working'; statusLabel = 'Trabajando'; fuenteEstado = 'ventana';
+  } else if (porVentana === 'quieta') {
+    fuenteEstado = 'ventana';
+    if (status === 'working') { status = 'waiting'; statusLabel = 'Esperandote'; }
+  }
+
   // Nombre de proyecto legible
   let projectName = cwd ? basename(cwd) || cwd : projectFolder;
   if (projectName.toLowerCase() === 'user') projectName = 'Carpeta personal (~)';
@@ -277,7 +289,7 @@ function analyzeSession(file, projectFolder) {
     projectName,
     cwd,
     model, gitBranch, version,
-    status, statusLabel,
+    status, statusLabel, fuenteEstado,
     lastModified: stat.mtimeMs,
     idleSeconds: Math.round(idleMs / 1000),
     lastUserPrompt, lastAssistantText,
@@ -291,7 +303,65 @@ function analyzeSession(file, projectFolder) {
   };
 }
 
+/* ---------- estado en vivo por la barra de titulos ----------
+ *
+ * El transcript .jsonl NO se escribe mientras un turno esta en marcha: su mtime
+ * se queda congelado hasta que el turno termina o entra un mensaje del usuario.
+ * Medido: 27 minutos de trabajo continuo sin que el archivo cambiara. Con eso,
+ * un semaforo calculado solo con el mtime marca "Esperandote" o "Inactiva"
+ * justo a las sesiones que estan trabajando — lo contrario de su proposito.
+ *
+ * El titulo de la ventana si va en vivo, porque Claude Code le antepone un
+ * glifo de estado. Se lee cada VENTANAS_TTL_MS, en segundo plano: la respuesta
+ * usa la ultima foto disponible y nunca espera a PowerShell.
+ */
+
+let ventanasFoto = { cuando: 0, mapa: new Map() };
+let ventanasEnVuelo = false;
+
+function claveTitulo(s) { return String(s || '').trim().toLowerCase(); }
+
+function refrescarVentanas() {
+  if (process.platform !== 'win32' || ventanasEnVuelo) return;
+  if (Date.now() - ventanasFoto.cuando < VENTANAS_TTL_MS) return;
+  const script = path.join(__dirname, 'estado-ventanas.ps1');
+  if (!fs.existsSync(script)) return;   // sin el script se degrada al mtime, no se rompe
+
+  ventanasEnVuelo = true;
+  const ps = spawn('powershell',
+    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script],
+    { windowsHide: true });
+
+  let salida = '';
+  ps.stdout.on('data', (d) => { salida += d; if (salida.length > 262144) ps.kill(); });
+  ps.on('error', () => { ventanasEnVuelo = false; });
+
+  const corte = setTimeout(() => ps.kill(), 6000);
+  ps.on('close', () => {
+    clearTimeout(corte);
+    ventanasEnVuelo = false;
+    try {
+      const mapa = new Map();
+      for (const v of JSON.parse(salida)) mapa.set(claveTitulo(v.titulo), v.glifo);
+      ventanasFoto = { cuando: Date.now(), mapa };
+    } catch (e) {
+      ventanasFoto.cuando = Date.now();   // reintentar al proximo ciclo, sin perder la foto vieja
+    }
+  });
+}
+
+/** 'trabajando' | 'quieta' | null si esa sesion no tiene ventana abierta. */
+function estadoPorVentana(aiTitle) {
+  if (!aiTitle) return null;
+  const glifo = ventanasFoto.mapa.get(claveTitulo(aiTitle));
+  if (glifo === undefined) return null;
+  // Conservador: cualquier glifo distinto al de quieta cuenta como trabajando,
+  // para que un cuadro nuevo de animacion no apague la deteccion.
+  return glifo === GLIFO_QUIETA ? 'quieta' : 'trabajando';
+}
+
 function collectSessions() {
+  refrescarVentanas();   // en segundo plano; esta respuesta usa la foto anterior
   const results = [];
   const cutoff = Date.now() - MAX_AGE_DAYS * 24 * 3600 * 1000;
   let folders = [];

@@ -26,6 +26,32 @@ Por cada sesión muestra una tarjeta encabezada por el **nombre de la conversaci
 - `main.js` + `package.json` — **opcional**: envuelven el panel en una **aplicación de Windows** (Electron) con ventana propia, bandeja y servidor incrustado. Ver la sección *Aplicación de escritorio*.
 - `aplicar-marca.js` — **obligatorio**: transforma `index.html` para cumplir el manual (quita el CDN de Google Fonts, incrusta Mansfield + Cropar en base64, corrige los tonos derivados, pone los títulos en itálica black y añade la barra degradada).
 
+## El orden de las tarjetas
+
+Las tarjetas se ordenan por **lo que te reclama a ti**, no por cuándo se tocó el archivo:
+
+| | Estado | Por qué va ahí |
+|---|---|---|
+| 1 | ⏸ Pausada | Está detenida esperando que le des permiso. Es la que más minutos cuesta. |
+| 2 | 🟡 Esperándote | Te toca a ti. |
+| 3 | 🟢 Trabajando | Va sola, no necesita nada. |
+| 4 | ⚪ Inactiva | Al final. |
+
+⚠️ **No ordenar por `mtime`.** Es lo que hacía antes y era engañoso: ese reloj se congela
+mientras la sesión trabaja (ver *El semáforo*), así que dejaba abajo justo a las que estaban
+en marcha. Dentro de cada estado sí se usa, para poner lo más reciente primero.
+
+**Fijar una tarjeta.** El pin del encabezado la sube al tope y la mantiene visible aunque se
+apague. Es preferencia de ese equipo (`localStorage`): no viaja a ningún lado ni le cambia el
+panel a nadie más. El orden dentro de cada grupo se respeta porque `sort()` es estable.
+
+**Ocultar inactivas.** Un botón en la cabecera esconde las apagadas — con doce sesiones,
+suele haber siete o más. Las fijadas **no se esconden** aunque estén inactivas: si la fijaste
+es porque la quieres a la vista.
+
+Las cifras de la cabecera (Trabajando / Esperando / Sesiones) cuentan **todas**, aunque abajo
+se oculten: un resumen que cambia con el filtro es un resumen que miente.
+
 ## Instalar o actualizar desde GitHub (camino rápido)
 
 En un equipo nuevo, **o en uno que ya tiene una versión vieja**, esto hace todo:

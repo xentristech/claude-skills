@@ -124,7 +124,20 @@
   #aviso.ver{opacity:1;transform:translate(-50%,0);}
   #aviso.mal{border-color:rgba(239,68,68,.55);}
 
-  .card-head{display:flex;align-items:center;gap:11px;}
+  .card-head{display:flex;align-items:center;gap:9px;}
+
+  /* Fijar una tarjeta arriba. Es preferencia de ESTE equipo (localStorage):
+     no viaja a ningun lado ni le cambia el panel a nadie mas. */
+  .pin{flex:none;width:24px;height:24px;display:grid;place-items:center;padding:0;
+       border:1px solid transparent;border-radius:8px;background:transparent;
+       color:var(--faint);cursor:pointer;opacity:.3;
+       transition:opacity .15s,color .15s,border-color .15s;}
+  .card:hover .pin,.card:focus-within .pin{opacity:1;}
+  .pin:hover{color:var(--lila);border-color:var(--border-strong);}
+  .pin:focus-visible{outline:2px solid var(--brand-2);outline-offset:2px;opacity:1;}
+  .card.fijada .pin{opacity:1;color:var(--brand-2);}
+  .card.fijada{border-color:var(--brand);}
+  body.presenta .pin{display:none;}
   .dot{width:11px;height:11px;border-radius:50%;flex:none;}
   .working .dot{background:var(--green);box-shadow:0 0 0 0 rgba(34,197,94,.55);}
   .waiting .dot{background:var(--amber);}
@@ -253,6 +266,9 @@
   <button class="toggle" id="btn-presenta" onclick="togglePresenta()" aria-pressed="false">
     <span id="btn-ic" aria-hidden="true"></span><span id="btn-txt">Modo presentación</span>
   </button>
+  <button class="toggle" id="btn-inactivas" onclick="toggleInactivas()" aria-pressed="false">
+    <span id="inac-ic" aria-hidden="true"></span><span id="inac-txt">Ocultar inactivas</span>
+  </button>
 </header>
 
 <main class="grid" id="grid" role="list" aria-label="Sesiones de agentes" aria-live="polite" aria-busy="true">
@@ -272,6 +288,9 @@ const P = {
   branch:'<line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
   monitor:'<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
   code:'<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>',
+  pin:'<path d="M12 17v5"/><path d="M9 10.8V4h6v6.8l2.5 3.2h-11z"/>',
+  ojo:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
+  ojoNo:'<path d="M17.9 17.9A10 10 0 0 1 12 20C5.5 20 2 12 2 12a18.5 18.5 0 0 1 5.1-5.9M9.9 4.2A9 9 0 0 1 12 4c6.5 0 10 8 10 8a18.5 18.5 0 0 1-2.2 3.2"/><path d="m1 1 22 22"/><path d="M9.9 9.9a3 3 0 1 0 4.2 4.2"/>',
   inbox:'<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
   abrir:'<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
   folder:'<path d="M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2z"/>',
@@ -287,23 +306,73 @@ function ago(sec){
 function hora(ts){ if(!ts) return ''; return new Date(ts).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}); }
 function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
+// ---- Preferencias de este equipo ----
+// Fijadas y "ocultar inactivas" viven en localStorage: son de quien mira el
+// panel, no del servidor. Otro equipo con el mismo Mission Control ve lo suyo.
+let fijadas = new Set();
+try{ fijadas = new Set(JSON.parse(localStorage.getItem('mc-fijadas')||'[]')); }catch(e){}
+let ocultarInactivas = false;
+try{ ocultarInactivas = localStorage.getItem('mc-ocultar-inactivas')==='1'; }catch(e){}
+let ultimoDato = null;
+
+function guardarFijadas(){
+  try{ localStorage.setItem('mc-fijadas',JSON.stringify([...fijadas])); }catch(e){}
+}
+function alternarFijada(id){
+  if(fijadas.has(id)) fijadas.delete(id); else fijadas.add(id);
+  guardarFijadas();
+  if(ultimoDato) render(ultimoDato);           // repintar ya, sin esperar los 4 s
+}
+function toggleInactivas(){
+  ocultarInactivas=!ocultarInactivas;
+  try{ localStorage.setItem('mc-ocultar-inactivas',ocultarInactivas?'1':'0'); }catch(e){}
+  pintarBotonInactivas();
+  if(ultimoDato) render(ultimoDato);
+}
+function pintarBotonInactivas(){
+  const b=document.getElementById('btn-inactivas');
+  b.classList.toggle('on',ocultarInactivas);
+  b.setAttribute('aria-pressed',ocultarInactivas?'true':'false');
+  document.getElementById('inac-ic').innerHTML=ic(ocultarInactivas?'ojoNo':'ojo');
+  document.getElementById('inac-txt').textContent=ocultarInactivas?'Mostrar todas':'Ocultar inactivas';
+}
+
 function render(data){
+  ultimoDato=data;
   const grid=document.getElementById('grid');
-  const sessions=data.sessions||[];
-  document.getElementById('st-total').textContent=sessions.length;
-  document.getElementById('st-working').textContent=sessions.filter(s=>s.status==='working').length;
-  document.getElementById('st-waiting').textContent=sessions.filter(s=>s.status==='waiting'||s.status==='paused').length;
+  const todas=data.sessions||[];
+  // Las cifras de arriba cuentan TODAS, aunque abajo se oculten algunas: un
+  // resumen que cambia segun el filtro es un resumen que miente.
+  document.getElementById('st-total').textContent=todas.length;
+  document.getElementById('st-working').textContent=todas.filter(s=>s.status==='working').length;
+  document.getElementById('st-waiting').textContent=todas.filter(s=>s.status==='waiting'||s.status==='paused').length;
   grid.setAttribute('aria-busy','false');
 
-  if(!sessions.length){
+  if(!todas.length){
     grid.innerHTML='<div class="empty">'+ic('inbox')+'<p>No hay sesiones recientes de Claude Code.<br>Abre una sesión y aparecerá aquí sola.</p></div>';
+    return;
+  }
+
+  // Una tarjeta fijada nunca se esconde, aunque este inactiva: si la fijaste
+  // es porque la quieres a la vista.
+  let sessions = ocultarInactivas
+    ? todas.filter(s=>s.status!=='idle'||fijadas.has(s.id))
+    : todas.slice();
+  const escondidas = todas.length - sessions.length;
+
+  // Las fijadas suben. sort() es estable, asi que dentro de cada grupo se
+  // respeta el orden que mando el servidor (primero lo que te reclama a ti).
+  sessions.sort((a,b)=>(fijadas.has(b.id)?1:0)-(fijadas.has(a.id)?1:0));
+
+  if(!sessions.length){
+    grid.innerHTML='<div class="empty">'+ic('ojoNo')+'<p>Las '+escondidas+' sesiones están inactivas y las tienes ocultas.<br>Pulsa <b>Mostrar todas</b> para verlas.</p></div>';
     return;
   }
 
   grid.innerHTML=sessions.map(s=>{
     const working=s.status==='working';
     return `
-    <article class="card ${esc(s.status)}" role="listitem" tabindex="0"
+    <article class="card ${esc(s.status)}${fijadas.has(s.id)?' fijada':''}" role="listitem" tabindex="0"
              data-id="${esc(s.id)}" data-proj="${esc(s.aiTitle||s.projectName)}" data-status="${esc(s.status)}"
              aria-label="Abrir la ventana de ${esc(s.aiTitle||s.projectName)}">
       <div class="card-head">
@@ -321,6 +390,10 @@ function render(data){
           </div>
         </div>
         <span class="badge">${esc(s.statusLabel)} · ${ago(s.idleSeconds)}</span>
+        <button class="pin" type="button" data-pin="${esc(s.id)}"
+                aria-pressed="${fijadas.has(s.id)?'true':'false'}"
+                title="${fijadas.has(s.id)?'Quitar de arriba':'Fijar arriba'}"
+                aria-label="${fijadas.has(s.id)?'Quitar de arriba':'Fijar arriba'} ${esc(s.aiTitle||s.projectName)}">${ic('pin')}</button>
       </div>
       <div class="now">
         <div class="label">${working?ic('activity')+' Ahora mismo':ic('message')+' Último avance'}</div>
@@ -404,6 +477,9 @@ async function abrirSesion(card){
 
 // Delegación: las tarjetas se repintan cada 4 s, así que el listener va en el grid.
 document.getElementById('grid').addEventListener('click',e=>{
+  // El boton de fijar no abre la sesion: solo sube la tarjeta.
+  const pin=e.target.closest('.pin');
+  if(pin){ e.stopPropagation(); alternarFijada(pin.dataset.pin); return; }
   // Un clic en el enlace de un artefacto abre el artefacto, no la sesión.
   if(e.target.closest('a')) { e.stopPropagation(); return; }
   const card=e.target.closest('.card');
@@ -427,6 +503,7 @@ function togglePresenta(){
 
 // init
 document.getElementById('btn-ic').innerHTML=ic('monitor');
+pintarBotonInactivas();
 if(localStorage.getItem('mc-presenta')==='1') togglePresenta();
 refresh();
 setInterval(refresh,4000);

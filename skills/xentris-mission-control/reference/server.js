@@ -380,12 +380,28 @@ function collectSessions() {
       } catch (e) { /* ignorar */ }
     }
   }
+  // Este orden es para ELEGIR las MAX_SESSIONS mas recientes, no para mostrar:
+  // aqui todavia no se analizo nada y el mtime es lo unico que hay.
   results.sort((a, b) => b.mtime - a.mtime);
   const sessions = [];
   for (const r of results.slice(0, MAX_SESSIONS)) {
     const s = analyzeSession(r.full, r.folder);
     if (s) sessions.push(s);
   }
+
+  // Orden de presentacion: primero lo que te reclama a TI.
+  //   Pausada  -> esta detenida esperando que le des permiso: cuesta minutos.
+  //   Esperandote -> te toca a ti.
+  //   Trabajando  -> va sola, no necesita nada.
+  //   Inactiva    -> al final.
+  // Ordenar por mtime seria enganoso: se congela mientras la sesion trabaja,
+  // asi que dejaria abajo justo a las que estan en marcha.
+  const PRIORIDAD = { paused: 0, waiting: 1, working: 2, idle: 3 };
+  sessions.sort((a, b) => {
+    const pa = PRIORIDAD[a.status], pb = PRIORIDAD[b.status];
+    const d = (pa === undefined ? 9 : pa) - (pb === undefined ? 9 : pb);
+    return d !== 0 ? d : b.lastModified - a.lastModified;
+  });
   return sessions;
 }
 

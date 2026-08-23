@@ -51,7 +51,11 @@ function NormalizarCarpeta($carpeta) {
     Where-Object { $EXT_TEXTO -contains $_.Extension.ToLower() } |
     ForEach-Object {
       $crudo = [System.IO.File]::ReadAllText($_.FullName, [System.Text.Encoding]::UTF8)
-      if ($crudo.Contains("`r`n") -or $crudo.StartsWith([char]0xFEFF)) {
+      # OJO: $crudo.StartsWith([char]0xFEFF) NO sirve. StartsWith compara segun
+      # la cultura, y el BOM es un caracter ignorable: devuelve True para
+      # cualquier cadena, asi que el detector daba positivo siempre. Comparar el
+      # primer caracter con -eq es comparacion ordinal y si dice la verdad.
+      if ($crudo.Contains("`r`n") -or ($crudo.Length -gt 0 -and $crudo[0] -eq [char]0xFEFF)) {
         CopiarTexto $_.FullName $_.FullName
         $n++
       }

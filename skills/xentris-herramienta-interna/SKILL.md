@@ -17,6 +17,20 @@ tu máquina. Está terminada cuando **otro equipo la instala sin ti**.
 
 ---
 
+## Implementación de referencia — copiar de ahí, no reinventar
+
+| Qué | Dónde |
+|---|---|
+| Receta completa, paso a paso | skill [[xentris-mission-control]] |
+| Archivos reales que se copian | `~\.claude\skills\xentris-mission-control\reference\` |
+| Instalación viva en este equipo | `C:\Users\xentr\mission-control` |
+| Repo público | `github.com/xentristech/claude-skills` |
+
+Piezas que se reusan tal cual y **no** hay que volver a escribir: `server.js` (servidor sin
+dependencias), `aplicar-marca.js` (marca que falla si no se aplicó), `enfocar.ps1` (enfocar una
+ventana en Windows), `estado-ventanas.ps1` (estado en vivo por la barra de títulos), `main.js`
++ `package.json` (envoltorio Electron).
+
 ## 1. Buscar el dato que ya existe
 
 La pregunta que abre la puerta no es *"¿qué habría que medir?"* sino **"¿qué información ya
@@ -83,10 +97,11 @@ Tres cosas que aprendimos ahí:
 
 ## 5. Verificar mirando, no confiando
 
-Esta sección existe porque cada una de estas trampas costó tiempo de verdad:
+⚠️ **GOTCHAS.** Cada una de estas costó tiempo de verdad:
 
 | Trampa | Cómo se ve | Qué hacer |
 |---|---|---|
+| El dato que miras no late | El semáforo mostró **0 trabajando** con siete sesiones activas: el `.jsonl` no se escribe mientras el turno corre | Antes de confiar en un `mtime`, mídelo con el reloj en la mano y busca una señal en vivo |
 | Un `200` no prueba nada | El servidor responde `index.html` a **cualquier ruta desconocida**, así que pedir `/api/sesiones` (mal escrito) daba 200 alegremente | Pega al endpoint real **y exige el `Content-Type`** |
 | Captura antes de tiempo | El screenshot headless salía con "Cargando…" porque se tomó antes del `fetch` | `--virtual-time-budget=8000`, y contrasta con `--dump-dom` |
 | Sustitución silenciosa de fuentes | El navegador cambia la tipografía sin avisar | **Renderiza y mira la imagen**, no confíes en el conteo |
@@ -132,9 +147,12 @@ Dos decisiones que se repiten en cualquier envoltorio de este tipo:
 
 Una herramienta que solo vive en un PC es un rehén. El cierre del trabajo es:
 
+El formato, el frontmatter y el registro los manda [[xentris-crear-skill]]: seguirlo, no
+improvisar. Lo que se suma aquí, aprendido en este caso:
+
 1. `SKILL.md` + carpeta `reference/` con los archivos reales que se copian.
-2. **Descripción corta.** Pasada de ~900 caracteres, el cargador la ignora y muestra solo el
-   H1. Mission Control quedó en ~750. Mídela, no la calcules a ojo.
+2. ⚠️ **GOTCHA — descripción corta.** Pasada de ~900 caracteres, el cargador **la ignora** y
+   muestra solo el H1: la skill deja de dispararse sola. Mídela, no la calcules a ojo.
 3. Pasos ejecutables (PowerShell y bash), con la verificación dentro del paso.
 4. **Una sección de trampas.** Es la parte más valiosa del documento: el éxito se reproduce
    solo, las trampas no.
@@ -189,6 +207,30 @@ de `POST /api/abrir` de Mission Control:
   argumento de línea de comandos: no hay comillas que escapar ni inyección posible.
 
 Pruébalo de verdad antes de cerrar: sin la cabecera debe dar **403**, y con un `id` inventado, **400**.
+
+## Clics de encendido (lo que necesita al humano)
+
+Ninguno de estos lo puede hacer el agente solo. Pedirlos **juntos y al principio**, no de a uno
+según van apareciendo:
+
+- **Las fuentes de marca.** Son comerciales y no viajan en el repo: hay que copiar la carpeta
+  `xentris-empresa\marca\fonts` a la máquina, o dar la ruta con `--fuentes "RUTA"`.
+- **Aprobar los scripts de npm** si se va a empaquetar — npm los bloquea por defecto y falla en
+  silencio, con código 0.
+- **Ejecutar el instalador**, o autorizar que corra en silencio con `/S`.
+- **Decidir el puerto** si el que usa la herramienta ya está ocupado en ese equipo.
+- **Confirmar antes de publicar** en el repo público, si el método toca algo interno.
+
+## Reglas (lo que no se negocia)
+
+- **Nunca `0.0.0.0`.** Un panel con datos de trabajo no se expone a internet sin autenticación,
+  ni "un momentito para probar".
+- **Nunca fuentes comerciales ni credenciales en un repo público**, aunque simplifique la vida.
+- **Nunca rutas de usuario escritas a fuego.** `os.homedir()` / `$env:USERPROFILE`.
+- **Nunca dar por verificado lo que no viste renderizado.** Un `200` no es una verificación.
+- **Nunca dos copias del mismo servidor.** Si el envoltorio necesita el servidor, que lo importe;
+  no que lance una segunda copia que se desincronice.
+- **Nunca empaquetar antes de que la herramienta se use** a diario.
 
 ## Checklist de cierre
 

@@ -38,8 +38,12 @@ Copy-Item -Recurse -Force $env:USERPROFILE\claude-skills\skills\* $env:USERPROFI
 & "$env:USERPROFILE\.claude\skills\xentris-mission-control\reference\actualizar.ps1" -DesdeGitHub
 ```
 
-De ahí en adelante basta la última línea: `-DesdeGitHub` hace `git pull`, vuelve a copiar los
-skills **pisando lo viejo** y pone al día la instalación.
+De ahí en adelante basta la última línea: `-DesdeGitHub` hace `git pull`, vuelve a copiar
+**este** skill pisando lo viejo, y pone al día la instalación.
+
+⚠️ **Copia solo `xentris-mission-control`, no `skills\*`.** Pisar todos los skills con `-Force`
+borraría sin rastro los que en ese equipo estén más nuevos que el repo — comprobado: dos de
+los instalados aquí difieren del repo. Para actualizar los demás, `Copy-Item` a conciencia.
 
 Lo que hace, y lo que a mano se olvida:
 

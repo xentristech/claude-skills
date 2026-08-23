@@ -52,11 +52,17 @@ if ($DesdeGitHub) {
     Ok "clonado en $Clon"
   }
 
+  # Se copia SOLO este skill, no 'skills\*'. Copiar todo con -Force pisaria
+  # skills locales que en ese equipo pueden estar mas nuevos que el repo, y el
+  # trabajo se perderia sin dejar rastro. Para actualizar el resto, a mano.
   $skillsDestino = "$env:USERPROFILE\.claude\skills"
+  $origenSkill = Join-Path $Clon 'skills\xentris-mission-control'
+  if (-not (Test-Path $origenSkill)) { Falla "el repo no trae xentris-mission-control"; exit 1 }
   New-Item -ItemType Directory -Force -Path $skillsDestino | Out-Null
-  # -Force a proposito: sin el, una copia vieja del skill se queda como esta.
-  Copy-Item -Recurse -Force (Join-Path $Clon 'skills\*') $skillsDestino
-  Ok "skills copiados a $skillsDestino (pisando lo viejo)"
+  # -Force a proposito: sin el, la copia vieja del skill se queda como esta.
+  Copy-Item -Recurse -Force $origenSkill $skillsDestino
+  Ok "xentris-mission-control actualizado en $skillsDestino (pisando lo viejo)"
+  Aviso "los demas skills del repo NO se tocan: para esos, Copy-Item a mano"
 }
 
 $ref = Join-Path $Skill 'reference'

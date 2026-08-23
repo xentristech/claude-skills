@@ -20,8 +20,40 @@ Por cada sesión muestra una tarjeta encabezada por el **nombre de la conversaci
 - `logo.png` — wordmark oficial de Xentris (opcional; si el proyecto tiene su propia marca, reemplázalo).
 - `estado-ventanas.ps1` — lee el glifo de estado del título de cada ventana: es la **única señal en vivo** de qué sesión está trabajando (el `.jsonl` no se escribe durante el turno). Ver *El semáforo*.
 - `enfocar.ps1` — trae al frente la ventana que una sesión ya tiene abierta (solo Windows). Si falta, el panel simplemente abre una ventana nueva cada vez.
+- `actualizar.ps1` — **el camino rápido**: instala o **actualiza** una instalación existente, y con `-DesdeGitHub` se trae primero lo último del repo. Ver la sección de abajo.
 - `main.js` + `package.json` — **opcional**: envuelven el panel en una **aplicación de Windows** (Electron) con ventana propia, bandeja y servidor incrustado. Ver la sección *Aplicación de escritorio*.
 - `aplicar-marca.js` — **obligatorio**: transforma `index.html` para cumplir el manual (quita el CDN de Google Fonts, incrusta Mansfield + Cropar en base64, corrige los tonos derivados, pone los títulos en itálica black y añade la barra degradada).
+
+## Instalar o actualizar desde GitHub (camino rápido)
+
+En un equipo nuevo, **o en uno que ya tiene una versión vieja**, esto hace todo:
+
+```powershell
+# Primera vez: traer el skill
+git clone https://github.com/xentristech/claude-skills.git $env:USERPROFILE\claude-skills
+Copy-Item -Recurse -Force $env:USERPROFILE\claude-skills\skills\* $env:USERPROFILE\.claude\skills\
+
+# Instalar o actualizar Mission Control
+& "$env:USERPROFILE\.claude\skills\xentris-mission-control\reference\actualizar.ps1" -DesdeGitHub
+```
+
+De ahí en adelante basta la última línea: `-DesdeGitHub` hace `git pull`, vuelve a copiar los
+skills **pisando lo viejo** y pone al día la instalación.
+
+Lo que hace, y lo que a mano se olvida:
+
+- **Si nada cambió, no toca nada** y lo dice. Es seguro correrlo cuando quieras.
+- **Para la app o el servidor antes de sobrescribir.** Windows bloquea los archivos abiertos y
+  la copia fallaría a medias.
+- ⚠️ **`index.html` no se copia encima.** El que corre es el que genera `aplicar-marca.js` con
+  las fuentes incrustadas (~370 KB); el del skill es solo la base. El script lo pone en
+  `index.html.orig` y **regenera**. Copiarlo directo deja el panel con Montserrat por CDN.
+- **`logo.png` solo se copia si falta**, porque en ese equipo puede estar personalizado.
+- **Si la marca no se puede aplicar, se detiene** y no reinicia nada: mejor caído que fuera de
+  marca. Pasa cuando faltan las fuentes; se resuelve con `-Fuentes "RUTA\marca\fonts"`.
+- **La aplicación de escritorio no se actualiza sola.** El script avisa: hay que correr
+  `npm run dist` y reinstalar el `.exe` para que la app tome los cambios.
+- Termina verificando **200 + `application/json`**, no solo el código 200.
 
 ## Parámetros a definir antes de instalar
 1. **MC_DIR**: carpeta donde vivirá el panel. Por defecto `~/mission-control` (en Windows `C:\Users\<usuario>\mission-control`).

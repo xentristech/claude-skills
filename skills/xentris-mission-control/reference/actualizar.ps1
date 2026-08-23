@@ -22,6 +22,7 @@
 
 param(
   [switch]$DesdeGitHub,
+  [switch]$App,
   [string]$Skill   = "$env:USERPROFILE\.claude\skills\xentris-mission-control",
   [string]$Destino = "$env:USERPROFILE\mission-control",
   [string]$Fuentes = "",
@@ -85,10 +86,14 @@ $baseNueva = Distinto (Join-Path $ref 'index.html') (Join-Path $Destino 'index.h
 if ($baseNueva) { $cambios += 'index.html (base)' }
 
 if ($cambios.Count -eq 0 -and -not $nuevaInstalacion) {
-  Ok "ya esta al dia: ningun archivo cambio"
-  ""; "Nada que hacer."; exit 0
+  Ok "el panel ya esta al dia: ningun archivo cambio"
+  # Con -App hay que seguir de todos modos: el .exe puede estar atrasado
+  # aunque los archivos del panel esten identicos.
+  if (-not $App) { ""; "Nada que hacer."; exit 0 }
+  Aviso "se continua igual porque pediste -App"
+} else {
+  "  cambian: $($cambios -join ', ')"
 }
-"  cambian: $($cambios -join ', ')"
 
 # ------------------------------------------------------------------ parar ----
 Titulo "3. Parando lo que este corriendo"
@@ -126,20 +131,68 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # ---------------------------------------------------------------- Electron ----
-if (Test-Path (Join-Path $Destino 'node_modules')) {
+$tieneModulos = Test-Path (Join-Path $Destino 'node_modules')
+$appRehecha = $false
+
+if ($App) {
+  Titulo "6. Aplicacion de escritorio (compilar e instalar)"
+  if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+    Falla "npm no esta instalado en este equipo (hace falta Node.js)."; exit 1
+  }
+
+  # electron-builder exige un .ico con tamano 256x256. Viaja en el skill para
+  # que un equipo nuevo no dependa del paquete de marca solo para compilar.
+  $ico = Join-Path $Destino 'marca-icon.ico'
+  if (-not (Test-Path $ico)) {
+    $icoRef = Join-Path $ref 'marca-icon.ico'
+    if (Test-Path $icoRef) { Copy-Item $icoRef $ico -Force; Ok "marca-icon.ico (traido del skill)" }
+    else { Falla "falta marca-icon.ico: electron-builder no puede compilar sin icono."; exit 1 }
+  }
+
+  Push-Location $Destino
+  npm install --save-dev electron@latest electron-builder@latest --no-fund --no-audit
+
+  # TRAMPA: npm bloquea el postinstall de electron y termina con codigo 0
+  # dejando node_modules sin el binario. Al arrancar da "Electron failed to
+  # install correctly" y parece un problema del codigo. Se baja a mano.
+  $binario = 'node_modules\electron\dist\electron.exe'
+  if (-not (Test-Path $binario)) {
+    Aviso "npm bloqueo el postinstall de electron: bajando el binario a mano"
+    node node_modules\electron\install.js
+  }
+  if (-not (Test-Path $binario)) { Pop-Location; Falla "no se pudo bajar Electron."; exit 1 }
+  Ok "Electron listo"
+
+  npm run dist
+  Pop-Location
+
+  $setup = Get-ChildItem (Join-Path $Destino 'dist') -Filter '*Setup*.exe' -ErrorAction SilentlyContinue |
+           Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $setup) { Falla "no se genero el instalador."; exit 1 }
+  Ok "instalador: $($setup.Name)  ($([math]::Round($setup.Length/1MB)) MB)"
+
+  Get-Process 'Mission Control' -ErrorAction SilentlyContinue | Stop-Process -Force
+  Start-Sleep -Milliseconds 600
+  Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait
+  Ok "app instalada por usuario, con desinstalador y acceso en el escritorio"
+  $appRehecha = $true
+}
+elseif ($tieneModulos) {
   Titulo "6. Aplicacion de escritorio"
   Push-Location $Destino
   npm install --no-fund --no-audit --silent
   Pop-Location
-  Aviso "para rehacer el .exe con estos cambios: cd $Destino ; npm run dist"
-  Aviso "y despues instalar dist\Mission Control Setup <version>.exe"
+  Aviso "este equipo ya tiene el envoltorio Electron, pero el .exe sigue con la version anterior."
+  Aviso "para rehacerlo e instalarlo: .\actualizar.ps1 -App"
 }
 
 # --------------------------------------------------------------- arrancar ----
 Titulo "7. Arrancando y verificando"
 $exeApp = "$env:LOCALAPPDATA\Programs\Mission Control\Mission Control.exe"
 if (Test-Path $exeApp) {
-  Aviso "hay app instalada: sigue con la version anterior hasta que hagas npm run dist"
+  if (-not $appRehecha) {
+    Aviso "hay app instalada: sigue con la version anterior hasta que corras -App"
+  }
   Start-Process $exeApp
   Ok "app abierta"
 } else {

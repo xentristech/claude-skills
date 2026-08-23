@@ -20,6 +20,7 @@ Por cada sesión muestra una tarjeta encabezada por el **nombre de la conversaci
 - `logo.png` — wordmark oficial de Xentris (opcional; si el proyecto tiene su propia marca, reemplázalo).
 - `estado-ventanas.ps1` — lee el glifo de estado del título de cada ventana: es la **única señal en vivo** de qué sesión está trabajando (el `.jsonl` no se escribe durante el turno). Ver *El semáforo*.
 - `enfocar.ps1` — trae al frente la ventana que una sesión ya tiene abierta (solo Windows). Si falta, el panel simplemente abre una ventana nueva cada vez.
+- `marca-icon.ico` — ícono de marca para la ventana, la bandeja y el instalador. electron-builder exige un tamaño 256×256; este los trae todos (16 a 256).
 - `actualizar.ps1` — **el camino rápido**: instala o **actualiza** una instalación existente, y con `-DesdeGitHub` se trae primero lo último del repo. Ver la sección de abajo.
 - `main.js` + `package.json` — **opcional**: envuelven el panel en una **aplicación de Windows** (Electron) con ventana propia, bandeja y servidor incrustado. Ver la sección *Aplicación de escritorio*.
 - `aplicar-marca.js` — **obligatorio**: transforma `index.html` para cumplir el manual (quita el CDN de Google Fonts, incrusta Mansfield + Cropar en base64, corrige los tonos derivados, pone los títulos en itálica black y añade la barra degradada).
@@ -51,8 +52,9 @@ Lo que hace, y lo que a mano se olvida:
 - **`logo.png` solo se copia si falta**, porque en ese equipo puede estar personalizado.
 - **Si la marca no se puede aplicar, se detiene** y no reinicia nada: mejor caído que fuera de
   marca. Pasa cuando faltan las fuentes; se resuelve con `-Fuentes "RUTA\marca\fonts"`.
-- **La aplicación de escritorio no se actualiza sola.** El script avisa: hay que correr
-  `npm run dist` y reinstalar el `.exe` para que la app tome los cambios.
+- **La aplicación de escritorio no se actualiza sola** salvo que pidas `-App`: sin esa
+  bandera el panel queda al día pero el `.exe` sigue con la versión anterior, y el script
+  te lo dice.
 - Termina verificando **200 + `application/json`**, no solo el código 200.
 
 ## Parámetros a definir antes de instalar
@@ -276,9 +278,25 @@ mismo proceso. Por eso los dos archivos van **dentro de la carpeta del panel**, 
 `server.js`, `index.html`, `logo.png` y `enfocar.ps1`, no en una carpeta aparte.
 
 ```powershell
+# Un solo comando: copia el envoltorio, instala Electron, compila e instala el .exe
+& "$env:USERPROFILE\.claude\skills\xentris-mission-control\reference\actualizar.ps1" -App
+
+# En un equipo nuevo, todo de una: repo + panel + aplicación
+& "$env:USERPROFILE\.claude\skills\xentris-mission-control\reference\actualizar.ps1" -DesdeGitHub -App
+```
+
+`-App` hace, en orden: copia `main.js` y `package.json`, trae `marca-icon.ico` si falta,
+instala Electron **rodeando la trampa 1**, compila con electron-builder y ejecuta el
+instalador en silencio. El `.exe` queda por usuario, con desinstalador y acceso en el
+escritorio. Se puede repetir cuando quieras: si el panel ya está al día, igual rehace la app.
+
+Si prefieres hacerlo paso a paso:
+
+```powershell
 $mc = "$env:USERPROFILE\mission-control"
 Copy-Item "<ruta-al-skill>\reference\main.js"      "$mc\main.js"      -Force
 Copy-Item "<ruta-al-skill>\reference\package.json" "$mc\package.json" -Force
+Copy-Item "<ruta-al-skill>\reference\marca-icon.ico" "$mc\marca-icon.ico" -Force
 cd $mc
 npm install --save-dev electron@latest electron-builder@latest
 node node_modules\electron\install.js    # ver trampa 1

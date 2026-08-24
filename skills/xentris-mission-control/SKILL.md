@@ -1,6 +1,6 @@
 ---
 name: xentris-mission-control
-description: Buena práctica de agente Xentris Tech. Instala "Mission Control", un panel local (Node sin dependencias, puerto 7777, solo 127.0.0.1) que lee los transcripts de Claude Code en ~/.claude/projects y muestra en tiempo real qué hace cada sesión: semáforo de estado, qué hace ahora en lenguaje humano, y modo presentación para clientes. Un clic en la tarjeta trae al frente la ventana que esa sesión ya tiene abierta. Aplica el manual de marca Xentris (Mansfield/Cropar incrustadas, sin CDN) y opcionalmente se empaqueta como aplicacion de escritorio con Electron. Úsala cuando pidan "mission control", "panel/dashboard de agentes", "ver qué hacen mis agentes", "observabilidad de agentes", "monitor de sesiones de Claude", o al montarlo en otro PC.
+description: Buena práctica de agente Xentris Tech. Instala "Mission Control", un panel local (Node sin dependencias, puerto 7777, solo 127.0.0.1) que lee los transcripts de Claude Code en ~/.claude/projects y muestra en tiempo real qué hace cada sesión: semáforo de estado, qué hace ahora en lenguaje humano, y modo presentación para clientes. Un clic en la tarjeta trae al frente la ventana que esa sesión ya tiene abierta. Aplica el manual de marca Xentris (Mansfield/Cropar incrustadas, sin CDN) y opcionalmente se empaqueta como aplicacion de escritorio con Electron. Úsala cuando pidan "mission control", "panel/dashboard de agentes", "ver qué hacen mis agentes", "observabilidad de agentes", "monitor de sesiones de Claude", "actualiza mission control", o al montarlo o ponerlo al dia en otro PC.
 ---
 
 # Mission Control — panel de observabilidad de agentes (Xentris Tech)
@@ -11,7 +11,9 @@ Mission Control es el **"Windows" de los agentes de IA**: una sola pantalla que 
 
 Por cada sesión muestra una tarjeta encabezada por el **nombre de la conversación** (el mismo que lleva la ventana de la terminal), con la carpeta del proyecto debajo, **semáforo de estado** (🟢 Trabajando / 🟡 Esperándote / ⏸ Pausada / ⚪ Inactiva), qué hace ahora en una frase, la última instrucción del usuario, una línea de tiempo de acciones, el modelo y si usa subagentes. Trae un botón **"Modo presentación"** que oculta lo técnico para compartir pantalla con un cliente.
 
-**Un clic en cualquier tarjeta abre esa sesión en su propia ventana**, retomando la conversación donde iba (ver más abajo).
+Las tarjetas se ordenan por **lo que te reclama a ti**, no por el reloj del archivo; se pueden **fijar** arriba y se pueden **ocultar las inactivas** (ver *El orden de las tarjetas*).
+
+**Un clic en cualquier tarjeta trae al frente la ventana que esa sesión ya tiene abierta**, y solo abre una nueva si no existe (ver más abajo).
 
 ## Archivos de referencia (en `reference/`)
 - `server.js` — servidor Node puro (lee `~/.claude/projects`, sirve el dashboard, API `/api/sessions` y `POST /api/abrir` para abrir una sesión). Portable a cualquier OS.
@@ -117,22 +119,29 @@ para poder encadenarlo.
 2. **PORT**: puerto del panel. Por defecto **7777** (definido en `server.js`).
 3. **LOGO**: opcional. Si el usuario tiene un logo de marca (PNG), cópialo como `logo.png`; si no, se usa el de Xentris o el fallback de texto.
 
-## Pasos
+## Pasos (instalación a mano)
+
+> Si solo quieres montarlo, usa `actualizar.ps1` de arriba: hace todo esto en un comando.
+> Estos pasos están para **entender qué queda instalado** y para sistemas que no son Windows.
 
 ### 1. Copiar los archivos del panel
-Crea `MC_DIR` y copia los tres archivos de `reference/` (`server.js`, `index.html`, `logo.png`). No hay `npm install`: el servidor usa solo módulos nativos de Node (`http`, `fs`, `path`, `os`).
+Crea `MC_DIR` y copia de `reference/`: `server.js`, `index.html`, `logo.png` y —en Windows—
+`enfocar.ps1`, `estado-ventanas.ps1` y `marca-icon.ico`. Sin los dos `.ps1` el panel funciona, pero **pierde
+el semáforo en vivo y el clic que enfoca la ventana**. No hay `npm install`: el servidor usa
+solo módulos nativos de Node (`http`, `fs`, `path`, `os`).
 
 ```powershell
 # Windows (PowerShell)
 $mc = "$env:USERPROFILE\mission-control"
+$ref = "<ruta-al-skill>\reference"
 New-Item -ItemType Directory -Force -Path $mc | Out-Null
-Copy-Item "<ruta-al-skill>\reference\server.js" "$mc\server.js" -Force
-Copy-Item "<ruta-al-skill>\reference\index.html" "$mc\index.html" -Force
-Copy-Item "<ruta-al-skill>\reference\logo.png"  "$mc\logo.png"  -Force
+foreach ($f in 'server.js','index.html','logo.png','enfocar.ps1','estado-ventanas.ps1','marca-icon.ico') {
+  Copy-Item "$ref\$f" "$mc\$f" -Force
+}
 ```
 
 ```bash
-# macOS / Linux
+# macOS / Linux (los .ps1 no aplican: allí el semáforo se calcula con el archivo)
 mkdir -p ~/mission-control
 cp reference/server.js reference/index.html reference/logo.png ~/mission-control/
 ```
@@ -140,8 +149,12 @@ cp reference/server.js reference/index.html reference/logo.png ~/mission-control
 ### 1.5. Aplicar el manual de marca (obligatorio)
 El `index.html` original trae Montserrat por CDN. Renómbralo a `index.html.orig`, copia
 `aplicar-marca.js` y ejecútalo: genera el `index.html` definitivo con las fuentes de marca
-incrustadas. Requiere el paquete de fuentes en
-`C:\Users\xentr\proyectos\xentris-empresa\marca\fonts` (ajusta `FONTS_DIR` en otro equipo).
+incrustadas.
+
+Las fuentes son comerciales y **no viajan en el repo**. El script las busca solo en las rutas
+habituales (`~/proyectos/xentris-empresa/marca/fonts`, `~/Documents/...`, `~/OneDrive/...`) y,
+si no las encuentra, **falla con instrucciones**. En un equipo donde estén en otro sitio:
+`node aplicar-marca.js --fuentes "D:\loquesea\marca\fonts"`.
 
 ```powershell
 Move-Item "$mc\index.html" "$mc\index.html.orig" -Force
@@ -153,8 +166,11 @@ node "$mc\aplicar-marca.js"   # debe reportar: 0 CDN externos, 0 Montserrat, 4 @
 HTML cambia de versión, y las fuentes se sustituyen sin avisar. Renderiza y revisa la captura:
 
 ```powershell
+# --virtual-time-budget es obligatorio: sin él la captura sale con "Cargando…",
+# porque se toma antes de que el fetch traiga las sesiones.
 & "C:\Program Files\Google\Chrome\Application\chrome.exe" --headless --disable-gpu `
-  --window-size=1500,1000 --screenshot="$mc\verificacion.png" "http://127.0.0.1:7777/"
+  --window-size=1500,1000 --virtual-time-budget=9000 `
+  --screenshot="$mc\verificacion.png" "http://127.0.0.1:7777/"
 ```
 
 ### 2. Arrancar y verificar
@@ -186,8 +202,9 @@ start "" http://localhost:7777
 "@ | Set-Content -LiteralPath $bat -Encoding ascii
 
 $desktop = [Environment]::GetFolderPath('Desktop')
-$ico = "$mc\marca-icon.ico"   # generar con PIL desde marca\isotipo-violeta.png
-# OJO (manual): logo-x.png NO tiene transparencia y deja recuadro blanco. Usar isotipo-violeta.png.
+$ico = "$mc\marca-icon.ico"   # viene en reference/, ya no hay que generarlo
+# (si alguna vez hay que rehacerlo: desde marca\isotipo-violeta.png, NUNCA desde
+#  logo-x.png, que no tiene transparencia y deja un recuadro blanco)
 $ws = New-Object -ComObject WScript.Shell
 $lnk = $ws.CreateShortcut((Join-Path $desktop "Mission Control.lnk"))
 $lnk.TargetPath = $bat
@@ -387,7 +404,7 @@ Se instala **por usuario**, sin pedir administrador.
    `index.html` a cualquier ruta que no reconozca, así que una ruta inventada siempre da
    200 y no prueba nada. Hay que exigir además que el `Content-Type` sea JSON.
 4. **El `.ico` necesita un tamaño de 256×256** o electron-builder falla. El
-   `marca-icon.ico` que genera el paso 1 ya los trae todos (16 a 256).
+   `marca-icon.ico` viaja en `reference/` y ya los trae todos (16 a 256).
 
 ### Si no quieres compilar nada
 

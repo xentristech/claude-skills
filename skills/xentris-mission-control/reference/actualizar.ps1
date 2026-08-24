@@ -63,6 +63,19 @@ function NormalizarCarpeta($carpeta) {
   return $n
 }
 
+# PowerShell convierte la salida por stderr de un .exe en error TERMINANTE
+# cuando ErrorActionPreference es 'Stop'. Un simple "npm warn" abortaba este
+# script a mitad, despues de haber aplicado la marca y antes de compilar, sin
+# que nada estuviera roto. Para un comando nativo lo que vale es el codigo de
+# salida, no lo que escriba por stderr.
+function Nativo {
+  param([string]$Que, [scriptblock]$Bloque)
+  $previo = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try { & $Bloque } finally { $ErrorActionPreference = $previo }
+  if ($LASTEXITCODE -ne 0) { Falla "$Que fallo (codigo $LASTEXITCODE)"; exit 1 }
+}
+
 function Titulo($t) { ""; "=" * 64; $t; "=" * 64 }
 function Ok($m)     { "  [ok]    $m" }
 function Aviso($m)  { "  [aviso] $m" }
@@ -76,11 +89,11 @@ if ($DesdeGitHub) {
   }
   if (Test-Path (Join-Path $Clon '.git')) {
     Push-Location $Clon
-    git pull --quiet
+    Nativo 'git pull' { git pull --quiet }
     Pop-Location
     Ok "actualizado el clon en $Clon"
   } else {
-    git clone --quiet $Repo $Clon
+    Nativo 'git clone' { git clone --quiet $Repo $Clon }
     Ok "clonado en $Clon"
   }
 
@@ -168,7 +181,9 @@ else { Copy-Item (Join-Path $ref 'logo.png') $logo -Force; Ok "logo.png" }
 Titulo "5. Aplicando el manual de marca"
 $argumentos = @((Join-Path $Destino 'aplicar-marca.js'))
 if ($Fuentes) { $argumentos += @('--fuentes', $Fuentes) }
-& node @argumentos
+$previo = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try { & node @argumentos } finally { $ErrorActionPreference = $previo }
 if ($LASTEXITCODE -ne 0) {
   ""; Falla "el panel quedaria FUERA DE MARCA. No se reinicia nada."
   "  Copia las fuentes a este equipo y repite con:"
@@ -196,7 +211,7 @@ if ($App) {
   }
 
   Push-Location $Destino
-  npm install --save-dev electron@latest electron-builder@latest --no-fund --no-audit
+  Nativo 'npm install' { npm install --save-dev electron@latest electron-builder@latest --no-fund --no-audit }
 
   # TRAMPA: npm bloquea el postinstall de electron y termina con codigo 0
   # dejando node_modules sin el binario. Al arrancar da "Electron failed to
@@ -204,12 +219,12 @@ if ($App) {
   $binario = 'node_modules\electron\dist\electron.exe'
   if (-not (Test-Path $binario)) {
     Aviso "npm bloqueo el postinstall de electron: bajando el binario a mano"
-    node node_modules\electron\install.js
+    Nativo 'la descarga de Electron' { node (Join-Path 'node_modules' 'electron' 'install.js') }
   }
   if (-not (Test-Path $binario)) { Pop-Location; Falla "no se pudo bajar Electron."; exit 1 }
   Ok "Electron listo"
 
-  npm run dist
+  Nativo 'npm run dist' { npm run dist }
   Pop-Location
 
   $setup = Get-ChildItem (Join-Path $Destino 'dist') -Filter '*Setup*.exe' -ErrorAction SilentlyContinue |
@@ -226,7 +241,7 @@ if ($App) {
 elseif ($tieneModulos) {
   Titulo "6. Aplicacion de escritorio"
   Push-Location $Destino
-  npm install --no-fund --no-audit --silent
+  Nativo 'npm install' { npm install --no-fund --no-audit --silent }
   Pop-Location
   Aviso "este equipo ya tiene el envoltorio Electron, pero el .exe sigue con la version anterior."
   Aviso "para rehacerlo e instalarlo: .\actualizar.ps1 -App"

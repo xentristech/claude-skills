@@ -10,6 +10,7 @@
 
 const { app, BrowserWindow, Tray, Menu, shell } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const http = require('http');
 
 const PUERTO = 7777;
@@ -19,6 +20,13 @@ const FONDO = '#0d0d0d';           // --bg del manual: evita el flashazo blanco 
 
 let ventana = null;
 let bandeja = null;
+let widget = null;
+
+// Se puede arrancar directo en la ventana flotante:  "Mission Control.exe" --widget
+// Sirve para un acceso directo aparte en el escritorio, y para poder probarla
+// sin depender de un clic en el menu de la bandeja.
+const soloWidget = process.argv.includes('--widget');
+let saltarPrimerShow = soloWidget;
 let saliendo = false;
 let avisoBandejaDado = false;
 
@@ -30,7 +38,9 @@ if (!app.requestSingleInstanceLock()) {
 
 app.setAppUserModelId('tech.xentris.missioncontrol');
 
-app.on('second-instance', () => mostrarVentana());
+app.on('second-instance', (ev, argv) => {
+  if (argv.includes('--widget')) abrirWidget(); else mostrarVentana();
+});
 
 // ---------- servidor ----------
 
@@ -102,7 +112,12 @@ function crearVentana(destinoAlterno) {
     },
   });
 
-  ventana.once('ready-to-show', () => ventana.show());
+  ventana.once('ready-to-show', () => {
+    // Con --widget la ventana grande se queda cargada pero oculta: el servidor
+    // vive en el proceso principal, asi que no hace falta mostrarla.
+    if (saltarPrimerShow) { saltarPrimerShow = false; return; }
+    ventana.show();
+  });
 
   // Los chips de artefacto apuntan a claude.ai. Dentro de la app eso dejaria al
   // usuario navegando fuera del panel y sin barra para volver: van al navegador.
@@ -155,6 +170,76 @@ function mostrarVentana() {
   ventana.focus();
 }
 
+// ---------- ventana flotante ----------
+//
+// Una ventanita sin bordes, siempre encima, que deja el estado a la vista sin
+// tener que abrir el panel. Es la MISMA pagina con ?vista=widget: no hay una
+// segunda interfaz que mantener, solo unas reglas de CSS.
+
+function archivoBordes() { return path.join(app.getPath('userData'), 'widget.json'); }
+
+function leerBordes() {
+  try { return JSON.parse(fs.readFileSync(archivoBordes(), 'utf8')); } catch (e) { return null; }
+}
+function guardarBordes(b) {
+  try { fs.writeFileSync(archivoBordes(), JSON.stringify(b)); } catch (e) { /* se abrira donde toque */ }
+}
+
+// Si la posicion guardada quedo fuera de toda pantalla (desconectaron un
+// monitor), la ventana existiria sin verse. Mejor devolverla a la esquina.
+function seVe(b, screen) {
+  return screen.getAllDisplays().some(d => {
+    const a = d.workArea;
+    return b.x + 60 > a.x && b.x < a.x + a.width - 60 &&
+           b.y + 40 > a.y && b.y < a.y + a.height - 40;
+  });
+}
+
+function abrirWidget() {
+  if (widget) { widget.show(); widget.focus(); return; }
+  const { screen } = require('electron');
+  const ANCHO = 300, ALTO = 430;
+  const guardado = leerBordes();
+  let bordes = { width: ANCHO, height: ALTO, x: undefined, y: undefined };
+  if (guardado && Number.isInteger(guardado.x) && seVe(guardado, screen)) {
+    bordes = guardado;
+  } else {
+    const a = screen.getPrimaryDisplay().workArea;
+    bordes.x = a.x + a.width - ANCHO - 24;      // esquina inferior derecha
+    bordes.y = a.y + a.height - ALTO - 24;
+  }
+
+  widget = new BrowserWindow({
+    width: bordes.width, height: bordes.height, x: bordes.x, y: bordes.y,
+    minWidth: 210, minHeight: 150,
+    frame: false,            // la barra de arrastre la pone el HTML
+    alwaysOnTop: true,
+    skipTaskbar: true,       // no ensucia la barra de tareas: es un adorno del escritorio
+    title: 'Mission Control',
+    icon: ICONO,
+    backgroundColor: FONDO,
+    show: false,
+    webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
+  });
+
+  widget.once('ready-to-show', () => widget.show());
+  widget.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  widget.webContents.on('will-navigate', (ev, url) => {
+    if (!url.startsWith(BASE)) { ev.preventDefault(); if (/^https?:/i.test(url)) shell.openExternal(url); }
+  });
+  widget.on('close', () => { if (widget) guardarBordes(widget.getBounds()); });
+  widget.on('closed', () => { widget = null; if (bandeja) pintarMenuBandeja(); });
+
+  widget.loadURL(BASE + '/?vista=widget');
+}
+
+function alternarWidget() {
+  if (widget) widget.close(); else abrirWidget();
+}
+
 // ---------- bandeja ----------
 
 function arrancaConWindows() {
@@ -164,6 +249,7 @@ function arrancaConWindows() {
 function pintarMenuBandeja() {
   bandeja.setContextMenu(Menu.buildFromTemplate([
     { label: 'Abrir Mission Control', click: mostrarVentana },
+    { label: 'Ventana flotante', type: 'checkbox', checked: !!widget, click: alternarWidget },
     { type: 'separator' },
     {
       label: 'Iniciar con Windows',
@@ -197,6 +283,7 @@ app.whenReady().then(() => {
           + 'Cierralo y vuelve a abrir Mission Control.')
       : null);
     crearBandeja();
+    if (soloWidget) abrirWidget();
   });
 });
 

@@ -228,6 +228,54 @@
   .empty .ic{font-size:44px;color:var(--faint);margin-bottom:14px;}
   .empty p{font-size:15px;line-height:1.6;}
 
+  /* ===== Vista compacta (ficha de escritorio) =====
+     La misma tarjeta, encogida a lo minimo: punto de estado, nombre y la
+     pastilla que dice si te espera o va avanzando. Se usa en dos sitios: con
+     el boton "Compacto" de la cabecera, y dentro de la ventana flotante. Por
+     eso es CSS sobre el mismo marcado y no una segunda plantilla que mantener.
+     El modo presentacion manda: ahi las tarjetas vuelven a ser grandes. */
+  body.compacto:not(.presenta) .grid{grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:10px;padding:14px 16px;}
+  body.compacto:not(.presenta) .card{padding:11px 13px;gap:0;}
+  body.compacto:not(.presenta) .now,
+  body.compacto:not(.presenta) .prompt,
+  body.compacto:not(.presenta) .timeline,
+  body.compacto:not(.presenta) .meta,
+  body.compacto:not(.presenta) .artefactos,
+  body.compacto:not(.presenta) .abrir,
+  body.compacto:not(.presenta) .slug{display:none;}
+  body.compacto:not(.presenta) .card-head{flex-wrap:wrap;gap:8px;}
+  body.compacto:not(.presenta) .proj{font-size:13.5px;-webkit-line-clamp:1;}
+  body.compacto:not(.presenta) .badge{order:9;width:100%;font-size:11px;padding:3px 8px;}
+
+  /* ===== Ventana flotante =====
+     Sin bordes de Windows, siempre encima. La barra de arriba es la zona por
+     donde se arrastra (-webkit-app-region), y los botones tienen que quedar
+     EXCLUIDOS de esa zona o dejan de recibir el clic. */
+  #barra-widget{display:none;}
+  body.widget #barra-widget{
+    display:flex;align-items:center;gap:8px;padding:8px 8px 8px 12px;
+    background:var(--surface-2);border-bottom:1px solid var(--border);
+    -webkit-app-region:drag;user-select:none;
+  }
+  body.widget #barra-widget .wm{font-family:Cropar,sans-serif;font-size:12px;letter-spacing:4px;color:var(--lila);}
+  body.widget #barra-widget .wsp{flex:1;}
+  body.widget .wbtn{
+    -webkit-app-region:no-drag;
+    width:22px;height:22px;display:grid;place-items:center;padding:0;
+    border:1px solid var(--border);border-radius:6px;background:transparent;
+    color:var(--muted);cursor:pointer;font-size:13px;line-height:1;
+  }
+  body.widget .wbtn:hover{color:var(--text);border-color:var(--border-strong);}
+  body.widget header,body.widget footer,body.widget .pin{display:none;}
+  /* :not(.presenta) para igualar la especificidad de las reglas de .compacto,
+     que si no le ganan a estas y devuelven la rejilla a varias columnas: en una
+     ventana de 300 px eso desborda y corta los nombres contra el borde. */
+  body.widget:not(.presenta) .grid{grid-template-columns:1fr;gap:7px;padding:9px 10px;}
+  body.widget:not(.presenta) .card{padding:9px 11px;min-width:0;}
+  body.widget{overflow-x:hidden;}
+  body.widget .proj{overflow:hidden;text-overflow:ellipsis;}
+  body.widget #aviso{left:10px;right:10px;bottom:10px;font-size:12px;}
+
   /* ===== Modo presentación ===== */
   body.presenta .grid{grid-template-columns:repeat(auto-fill,minmax(460px,1fr));}
   body.presenta .slug,body.presenta .meta,body.presenta .prompt{display:none;}
@@ -248,6 +296,11 @@
 </style>
 </head>
 <body>
+<div id="barra-widget">
+  <span class="wm">XENTRIS</span>
+  <span class="wsp"></span>
+  <button class="wbtn" type="button" onclick="window.close()" title="Cerrar la ventana flotante" aria-label="Cerrar">✕</button>
+</div>
 <header>
   <div class="brandmark">
     <img src="logo.png" alt="Xentris Tech" onerror="this.outerHTML='<strong style=&quot;font-size:20px;letter-spacing:.5px;color:var(--lila)&quot;>XENTRIS</strong>'">
@@ -265,6 +318,9 @@
   </div>
   <button class="toggle" id="btn-presenta" onclick="togglePresenta()" aria-pressed="false">
     <span id="btn-ic" aria-hidden="true"></span><span id="btn-txt">Modo presentación</span>
+  </button>
+  <button class="toggle" id="btn-compacto" onclick="toggleCompacto()" aria-pressed="false">
+    <span id="comp-ic" aria-hidden="true"></span><span id="comp-txt">Compacto</span>
   </button>
   <button class="toggle" id="btn-inactivas" onclick="toggleInactivas()" aria-pressed="false">
     <span id="inac-ic" aria-hidden="true"></span><span id="inac-txt">Ocultar inactivas</span>
@@ -289,6 +345,7 @@ const P = {
   monitor:'<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
   code:'<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>',
   pin:'<path d="M12 17v5"/><path d="M9 10.8V4h6v6.8l2.5 3.2h-11z"/>',
+  cuadricula:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
   ojo:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
   ojoNo:'<path d="M17.9 17.9A10 10 0 0 1 12 20C5.5 20 2 12 2 12a18.5 18.5 0 0 1 5.1-5.9M9.9 4.2A9 9 0 0 1 12 4c6.5 0 10 8 10 8a18.5 18.5 0 0 1-2.2 3.2"/><path d="m1 1 22 22"/><path d="M9.9 9.9a3 3 0 1 0 4.2 4.2"/>',
   inbox:'<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
@@ -501,10 +558,28 @@ function togglePresenta(){
   localStorage.setItem('mc-presenta',on?'1':'0');
 }
 
+function toggleCompacto(){
+  const on=document.body.classList.toggle('compacto');
+  const b=document.getElementById('btn-compacto');
+  b.classList.toggle('on',on);
+  b.setAttribute('aria-pressed',on?'true':'false');
+  document.getElementById('comp-txt').textContent=on?'Tarjetas':'Compacto';
+  try{ localStorage.setItem('mc-compacto',on?'1':'0'); }catch(e){}
+}
+
 // init
 document.getElementById('btn-ic').innerHTML=ic('monitor');
+document.getElementById('comp-ic').innerHTML=ic('cuadricula');
 pintarBotonInactivas();
+if(localStorage.getItem('mc-compacto')==='1') toggleCompacto();
 if(localStorage.getItem('mc-presenta')==='1') togglePresenta();
+
+// La ventana flotante es la misma pagina con ?vista=widget: siempre compacta,
+// sin cabecera ni pie, y con su propia barra para arrastrarla.
+if(new URLSearchParams(location.search).get('vista')==='widget'){
+  document.body.classList.add('widget','compacto');
+  document.body.classList.remove('presenta');
+}
 refresh();
 setInterval(refresh,4000);
 </script>

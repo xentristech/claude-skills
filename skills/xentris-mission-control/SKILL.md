@@ -13,6 +13,8 @@ Por cada sesión muestra una tarjeta encabezada por el **nombre de la conversaci
 
 Las tarjetas se ordenan por **lo que te reclama a ti**, no por el reloj del archivo; se pueden **fijar** arriba y se pueden **ocultar las inactivas** (ver *El orden de las tarjetas*).
 
+Tiene además un **modo escritorio**: la ficha encogida a punto de estado, nombre y pastilla, dentro del panel o en una **ventana flotante siempre encima** (ver *Modo escritorio*).
+
 **Un clic en cualquier tarjeta trae al frente la ventana que esa sesión ya tiene abierta**, y solo abre una nueva si no existe (ver más abajo).
 
 ## Archivos de referencia (en `reference/`)
@@ -53,6 +55,39 @@ es porque la quieres a la vista.
 
 Las cifras de la cabecera (Trabajando / Esperando / Sesiones) cuentan **todas**, aunque abajo
 se oculten: un resumen que cambia con el filtro es un resumen que miente.
+
+## Modo escritorio: ficha compacta y ventana flotante
+
+La misma tarjeta, encogida a lo mínimo: **punto de estado, nombre y la pastilla** que dice si
+te espera o va avanzando. Nada más. Vive en dos sitios:
+
+- **Botón "Compacto"** en la cabecera del panel. Las tarjetas se encogen a fichas; se recuerda
+  en `localStorage`.
+- **Ventana flotante**, desde el menú de la bandeja → *Ventana flotante*. Una ventanita sin
+  bordes, **siempre encima**, en una esquina del escritorio. Deja el estado a la vista sin
+  abrir nada. Un clic en una ficha enfoca esa sesión, igual que en el panel grande.
+  También se abre sola con `"Mission Control.exe" --widget`, que sirve para dejar un acceso
+  directo aparte en el escritorio: ahí la ventana grande ni se muestra.
+
+**Cómo está hecho, y por qué así:** es **CSS sobre el mismo marcado**, y la flotante es la
+**misma página** con `?vista=widget`. No hay una segunda interfaz que mantener en paralelo —
+que es como estas cosas se pudren: arreglas el panel y el widget se queda atrás.
+
+El **modo presentación manda** sobre el compacto: ante un cliente las tarjetas vuelven a ser
+grandes. Por eso las reglas van con `body.compacto:not(.presenta)`.
+
+### Cuatro detalles que hay que respetar
+
+1. ⚠️ **`frame:false` obliga a poner la zona de arrastre a mano** (`-webkit-app-region: drag`
+   en la barra de arriba). Y **los botones tienen que ir excluidos** con `no-drag`, o dejan de
+   recibir el clic: la zona de arrastre se los come.
+2. **`skipTaskbar: true`.** Es un adorno del escritorio, no una ventana más: no debe ensuciar
+   la barra de tareas ni el Alt+Tab.
+3. **La posición se guarda** en `widget.json` dentro de `app.getPath('userData')`. Si al abrir
+   quedó fuera de toda pantalla —desconectaron un monitor— **vuelve a la esquina**; si no, la
+   ventana existiría sin que se pueda ver.
+4. **Los enlaces externos van al navegador** también aquí (mismo `setWindowOpenHandler` que la
+   ventana principal). En una ventana sin bordes es peor todavía: no habría cómo volver.
 
 ## Instalar o actualizar desde GitHub (camino rápido)
 

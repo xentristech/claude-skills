@@ -59,6 +59,12 @@
   .brandmark{display:flex;align-items:center;gap:13px;min-width:0;}
   .brandmark img{height:30px;width:auto;display:block;}
   .brandmark .sep{width:1px;height:30px;background:var(--border-strong);}
+  .toggle{white-space:nowrap;}
+  /* aplicar-marca.js reemplaza el bloque ".title h1{...}" entero, asi que
+     lo que se ponga ahi se pierde al aplicar la marca. Este selector es
+     distinto y sobrevive. */
+  header .title h1{white-space:nowrap;}
+  @media (max-width:1460px){ .title p{display:none;} }
   .title h1{font-size:16px;font-weight:700;letter-spacing:.2px;line-height:1.1;}
   .title p{font-size:12px;color:var(--muted);margin-top:2px;}
   .spacer{flex:1;}
@@ -151,9 +157,23 @@
      ventana), que puede ser largo: se acota a dos líneas para no descuadrar. */
   .proj{
     font-weight:700;font-size:15.5px;line-height:1.25;overflow-wrap:anywhere;
-    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+    /* Sin recorte: la pastilla de resumen va posicionada dentro y un
+       overflow:hidden aqui se la comeria. El titulo es el nombre de la
+       carpeta, casi siempre una palabra, asi que no hace falta recortarlo. */
   }
-  .slug{color:var(--muted);font-size:11.5px;display:flex;align-items:center;gap:6px;margin-top:2px;}
+  /* Va en su propia linea, fuera de .card-head: ahi competia por el ancho
+     con la pastilla de estado y quedaba en "~/pr...". El margen negativo
+     compensa el gap de la tarjeta para que siga pegada al titulo. */
+  .slug{color:var(--muted);font-size:11.5px;display:flex;align-items:center;gap:6px;
+        margin-top:-9px;min-width:0;}
+  .slug .ruta{flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  /* Solo aparece cuando dos sesiones comparten proyecto: sin esto las dos
+     tarjetas se verian identicas. Es el nombre de la conversacion, que por lo
+     demas se usa unicamente por dentro, para encontrar la ventana. */
+  .hilo{
+    flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    font-style:italic;color:var(--faint);border-left:1px solid var(--border-strong);padding-left:6px;
+  }
 
   /* ===== Nombre del proyecto + pastilla de resumen al pasar el mouse ===== */
   .proyecto{
@@ -244,7 +264,8 @@
   body.compacto:not(.presenta) .abrir,
   body.compacto:not(.presenta) .slug{display:none;}
   body.compacto:not(.presenta) .card-head{flex-wrap:wrap;gap:8px;}
-  body.compacto:not(.presenta) .proj{font-size:13.5px;-webkit-line-clamp:1;}
+  body.compacto:not(.presenta) .proj{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  body.compacto:not(.presenta) .pastilla{display:none;}
   body.compacto:not(.presenta) .badge{order:9;width:100%;font-size:11px;padding:3px 8px;}
 
   /* ===== Ventana flotante =====
@@ -421,6 +442,11 @@ function render(data){
   // respeta el orden que mando el servidor (primero lo que te reclama a ti).
   sessions.sort((a,b)=>(fijadas.has(b.id)?1:0)-(fijadas.has(a.id)?1:0));
 
+  // Dos sesiones en la misma carpeta darian dos tarjetas identicas: se marca
+  // cuales estan repetidas para poder distinguirlas abajo.
+  const repetidos={};
+  todas.forEach(x=>{ repetidos[x.projectName]=(repetidos[x.projectName]||0)+1; });
+
   if(!sessions.length){
     grid.innerHTML='<div class="empty">'+ic('ojoNo')+'<p>Las '+escondidas+' sesiones están inactivas y las tienes ocultas.<br>Pulsa <b>Mostrar todas</b> para verlas.</p></div>';
     return;
@@ -430,20 +456,17 @@ function render(data){
     const working=s.status==='working';
     return `
     <article class="card ${esc(s.status)}${fijadas.has(s.id)?' fijada':''}" role="listitem" tabindex="0"
-             data-id="${esc(s.id)}" data-proj="${esc(s.aiTitle||s.projectName)}" data-status="${esc(s.status)}"
-             aria-label="Abrir la ventana de ${esc(s.aiTitle||s.projectName)}">
+             data-id="${esc(s.id)}" data-proj="${esc(s.projectName)}" data-status="${esc(s.status)}"
+             aria-label="Abrir la ventana de ${esc(s.projectName)}">
       <div class="card-head">
         <span class="dot" aria-hidden="true"></span>
         <div style="min-width:0">
-          <div class="proj">${esc(s.aiTitle||s.projectName)}</div>
-          <div class="slug">
-            <span class="proyecto"${s.resumen?' data-resumen tabindex="0"':''}>
-              ${ic('folder')}${esc(s.projectName)}
+          <div class="proj">
+            <span class="proyecto"${s.resumen?' data-resumen tabindex="0"':''}>${esc(s.projectName)}
               ${s.resumen?`<span class="pastilla" role="tooltip"
                 ><span class="p-et">De qué va este proyecto</span>${esc(s.resumen.texto)}<span
                 class="p-fuente">${ic('file')}${esc(s.resumen.fuente)}</span></span>`:''}
             </span>
-            ${s.subagents?ic('branch')+' subagentes':''}
           </div>
         </div>
         <span class="badge">${esc(s.statusLabel)} · ${ago(s.idleSeconds)}</span>
@@ -451,6 +474,13 @@ function render(data){
                 aria-pressed="${fijadas.has(s.id)?'true':'false'}"
                 title="${fijadas.has(s.id)?'Quitar de arriba':'Fijar arriba'}"
                 aria-label="${fijadas.has(s.id)?'Quitar de arriba':'Fijar arriba'} ${esc(s.aiTitle||s.projectName)}">${ic('pin')}</button>
+      </div>
+      <div class="slug">
+        ${ic('folder')}<span class="ruta">${esc(s.cwdCorto||s.projectName)}</span>
+        ${(repetidos[s.projectName]>1&&s.aiTitle)?`<span class="hilo"
+          title="Hay más de una sesión en este proyecto; esto las distingue"
+          >${esc(s.aiTitle)}</span>`:''}
+        ${s.subagents?ic('branch')+' subagentes':''}
       </div>
       <div class="now">
         <div class="label">${working?ic('activity')+' Ahora mismo':ic('message')+' Último avance'}</div>

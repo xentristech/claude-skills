@@ -9,7 +9,9 @@ Mission Control es el **"Windows" de los agentes de IA**: una sola pantalla que 
 
 **Cómo funciona:** cada sesión de Claude Code escribe todo lo que hace, en tiempo real, en archivos `.jsonl` dentro de `~/.claude/projects/`. Esa información **ya existe**; Mission Control solo la lee y la pinta. Es un servidor Node **sin dependencias**, que escucha **solo en 127.0.0.1** (nada sale del equipo), en el puerto **7777**, y el dashboard se refresca cada 4 s.
 
-Por cada sesión muestra una tarjeta encabezada por el **nombre de la conversación** (el mismo que lleva la ventana de la terminal), con la carpeta del proyecto debajo, **semáforo de estado** (🟢 Trabajando / 🟡 Esperándote / ⏸ Pausada / ⚪ Inactiva), qué hace ahora en una frase, la última instrucción del usuario, una línea de tiempo de acciones, el modelo y si usa subagentes. Trae un botón **"Modo presentación"** que oculta lo técnico para compartir pantalla con un cliente.
+Por cada sesión muestra una tarjeta encabezada por el **nombre del proyecto** (la carpeta), con la ruta corta debajo, **semáforo de estado** (🟢 Trabajando / 🟡 Esperándote / ⏸ Pausada / ⚪ Inactiva), qué hace ahora en una frase, la última instrucción del usuario, una línea de tiempo de acciones, el modelo y si usa subagentes. Trae un botón **"Modo presentación"** que oculta lo técnico para compartir pantalla con un cliente.
+
+⚠️ **El nombre de la conversación no se muestra.** Se sigue leyendo del transcript (evento `ai-title`) porque es lo único que permite encontrar la ventana de esa sesión para enfocarla — pero es **interno**: en la tarjeta manda el proyecto, que es como uno piensa el trabajo. La única excepción: si **dos sesiones comparten carpeta**, las dos tarjetas se verían idénticas, así que ahí —y solo ahí— aparece el nombre de la conversación en pequeño, para distinguirlas.
 
 Las tarjetas se ordenan por **lo que te reclama a ti**, no por el reloj del archivo; se pueden **fijar** arriba y se pueden **ocultar las inactivas** (ver *El orden de las tarjetas*).
 

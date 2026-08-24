@@ -271,6 +271,18 @@ function analyzeSession(file, projectFolder) {
     if (status === 'working') { status = 'waiting'; statusLabel = 'Esperandote'; }
   }
 
+  // Ruta legible para la linea de debajo del titulo: la carpeta del usuario se
+  // reemplaza por ~ para que no ocupe media tarjeta ni exponga el usuario.
+  // Solo las dos ultimas partes: la ruta completa se recorta a "~/pr..." en una
+  // tarjeta estrecha y deja de decir nada. Con la carpeta madre basta para
+  // ubicarlo (jose/sitemio no es lo mismo que clientes/sitemio).
+  let cwdCorto = '';
+  if (cwd) {
+    const partes = cwd.split(/[\\/]+/).filter(Boolean);
+    const cola = partes.slice(-2);
+    cwdCorto = (partes.length > 2 ? '…/' : '') + cola.join('/');
+  }
+
   // Nombre de proyecto legible
   let projectName = cwd ? basename(cwd) || cwd : projectFolder;
   if (projectName.toLowerCase() === 'user') projectName = 'Carpeta personal (~)';
@@ -287,7 +299,7 @@ function analyzeSession(file, projectFolder) {
     slug: slug || null,
     aiTitle,
     projectName,
-    cwd,
+    cwd, cwdCorto,
     model, gitBranch, version,
     status, statusLabel, fuenteEstado,
     lastModified: stat.mtimeMs,

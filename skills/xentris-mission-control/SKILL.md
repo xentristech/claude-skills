@@ -60,8 +60,10 @@ se oculten: un resumen que cambia con el filtro es un resumen que miente.
 
 ## Modo escritorio: ficha compacta y ventana flotante
 
-La misma tarjeta, encogida a lo mínimo: **punto de estado, nombre y la pastilla** que dice si
-te espera o va avanzando. Nada más. Vive en dos sitios:
+La misma tarjeta, encogida a lo mínimo: **punto de estado, nombre del proyecto, la pastilla**
+que dice si te espera o va avanzando, y **una línea con qué está pasando** — lo que hace si
+avanza, o qué necesita de ti si te espera. Sin esa línea la ficha solo diría "Esperándote" y
+habría que abrir el panel para saber a qué. Vive en dos sitios:
 
 - **Botón "Compacto"** en la cabecera del panel. Las tarjetas se encogen a fichas; se recuerda
   en `localStorage`.
@@ -78,7 +80,7 @@ que es como estas cosas se pudren: arreglas el panel y el widget se queda atrás
 El **modo presentación manda** sobre el compacto: ante un cliente las tarjetas vuelven a ser
 grandes. Por eso las reglas van con `body.compacto:not(.presenta)`.
 
-### Cuatro detalles que hay que respetar
+### Siete detalles que hay que respetar
 
 1. ⚠️ **`frame:false` obliga a poner la zona de arrastre a mano** (`-webkit-app-region: drag`
    en la barra de arriba). Y **los botones tienen que ir excluidos** con `no-drag`, o dejan de
@@ -90,6 +92,16 @@ grandes. Por eso las reglas van con `body.compacto:not(.presenta)`.
    ventana existiría sin que se pueda ver.
 4. **Los enlaces externos van al navegador** también aquí (mismo `setWindowOpenHandler` que la
    ventana principal). En una ventana sin bordes es peor todavía: no habría cómo volver.
+
+5. ⚠️ **El recorte a dos líneas va en el texto, no en la caja.** `-webkit-line-clamp` sobre un
+   elemento con `padding-bottom` deja asomar un trozo de la línea siguiente por debajo del
+   corte. Por eso el texto va envuelto en un `<span class="txt">`: el corte queda limpio.
+6. **Si dos sesiones comparten carpeta**, las dos fichas se llamarían igual — la misma
+   confusión que se quería evitar. Solo en ese caso aparece el nombre de la conversación en
+   pequeño, debajo del nombre del proyecto.
+7. **El texto viene en markdown** (`**`, `##`, backticks), que leído de un vistazo no aporta
+   nada y se come media ficha. `limpiarMarcado()` en `server.js` quita las **marcas**, no el
+   contenido; deja intacto lo que parece markdown pero no lo es, como `issue #42`.
 
 ## Instalar o actualizar desde GitHub (camino rápido)
 

@@ -256,7 +256,6 @@
      El modo presentacion manda: ahi las tarjetas vuelven a ser grandes. */
   body.compacto:not(.presenta) .grid{grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:10px;padding:14px 16px;}
   body.compacto:not(.presenta) .card{padding:11px 13px;gap:0;}
-  body.compacto:not(.presenta) .now,
   body.compacto:not(.presenta) .prompt,
   body.compacto:not(.presenta) .timeline,
   body.compacto:not(.presenta) .meta,
@@ -267,6 +266,30 @@
   body.compacto:not(.presenta) .proj{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   body.compacto:not(.presenta) .pastilla{display:none;}
   body.compacto:not(.presenta) .badge{order:9;width:100%;font-size:11px;padding:3px 8px;}
+
+  /* En compacto la ficha SI dice que esta pasando, en una linea: lo que hace
+     si va avanzando, o lo que necesita de ti si te esta esperando. Es el mismo
+     texto de la tarjeta grande (nowDoing), recortado a dos lineas. Sin esto la
+     ficha solo dice "Esperandote" y hay que abrir el panel para saber a que. */
+  body.compacto:not(.presenta) .now{
+    margin-top:9px;padding:7px 9px;font-size:12px;line-height:1.35;border-radius:8px;
+  }
+  body.compacto:not(.presenta) .now .label{display:none;}
+  /* El recorte va en el texto, NO en .now: con -webkit-line-clamp sobre una
+     caja con padding-bottom se asoma un trozo de la linea siguiente por debajo
+     del recorte. Envolviendo el texto, el corte queda limpio. */
+  body.compacto:not(.presenta) .now .txt{
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  }
+
+  /* Si dos sesiones comparten carpeta, en compacto las dos fichas se llamarian
+     igual. Ahi -- y solo ahi -- se deja ver el nombre de la conversacion, sin
+     la ruta, que en una ficha no cabe. */
+  body.compacto:not(.presenta) .card.repetido .slug{display:flex;margin-top:5px;}
+  body.compacto:not(.presenta) .card.repetido .slug > .ic,
+  body.compacto:not(.presenta) .card.repetido .slug .ruta,
+  body.compacto:not(.presenta) .card.repetido .slug .subs{display:none;}
+  body.compacto:not(.presenta) .card.repetido .hilo{border-left:0;padding-left:0;}
 
   /* ===== Ventana flotante =====
      Sin bordes de Windows, siempre encima. La barra de arriba es la zona por
@@ -455,7 +478,7 @@ function render(data){
   grid.innerHTML=sessions.map(s=>{
     const working=s.status==='working';
     return `
-    <article class="card ${esc(s.status)}${fijadas.has(s.id)?' fijada':''}" role="listitem" tabindex="0"
+    <article class="card ${esc(s.status)}${fijadas.has(s.id)?' fijada':''}${repetidos[s.projectName]>1?' repetido':''}" role="listitem" tabindex="0"
              data-id="${esc(s.id)}" data-proj="${esc(s.projectName)}" data-status="${esc(s.status)}"
              aria-label="Abrir la ventana de ${esc(s.projectName)}">
       <div class="card-head">
@@ -480,11 +503,11 @@ function render(data){
         ${(repetidos[s.projectName]>1&&s.aiTitle)?`<span class="hilo"
           title="Hay más de una sesión en este proyecto; esto las distingue"
           >${esc(s.aiTitle)}</span>`:''}
-        ${s.subagents?ic('branch')+' subagentes':''}
+        ${s.subagents?`<span class="subs">${ic('branch')}subagentes</span>`:''}
       </div>
       <div class="now">
         <div class="label">${working?ic('activity')+' Ahora mismo':ic('message')+' Último avance'}</div>
-        ${esc(s.nowDoing)}
+        <span class="txt">${esc(s.nowDoing)}</span>
       </div>
       ${s.lastUserPrompt?`<div class="prompt"><b>Instrucción:</b> ${esc(s.lastUserPrompt)}</div>`:''}
       ${s.timeline.length?`<div class="timeline">${s.timeline.map(t=>

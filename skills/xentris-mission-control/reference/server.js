@@ -51,9 +51,24 @@ function basename(p) {
   return String(p).split(/[\\/]/).pop();
 }
 
+// El texto sale de mensajes escritos en markdown. Los asteriscos, almohadillas
+// y comillas invertidas no aportan nada leidos de un vistazo y se comen la
+// mitad de una ficha compacta, asi que se quitan las MARCAS, no el contenido.
+function limpiarMarcado(s) {
+  return String(s)
+    .replace(/```[\s\S]*?```/g, ' ')      // bloques de codigo enteros: no se leen de un vistazo
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/\*\*([^*]*)\*\*/g, '$1')
+    .replace(/(^|\s)[*_]{1,2}(\S)/g, '$1$2')
+    .replace(/(\S)[*_]{1,2}(\s|$)/g, '$1$2')
+    .replace(/(^|\s)#{1,6}\s+/g, '$1')
+    .replace(/(^|\s)[-–—]{3,}(\s|$)/g, ' ')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1');  // enlaces: se queda el texto
+}
+
 function shorten(s, n) {
   if (!s) return '';
-  s = String(s).replace(/\s+/g, ' ').trim();
+  s = limpiarMarcado(s).replace(/\s+/g, ' ').trim();
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 }
 
